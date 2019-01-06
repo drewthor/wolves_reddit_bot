@@ -13,6 +13,7 @@ type TeamSchedule struct {
 	} `json:"league"`
 }
 type ScheduledGame struct {
+	GameID           string `json:"gameId"`
 	StartDateEastern string `json:"startDateEastern"`
 	StartTimeUTC     string `json:"startTimeUTC"`
 }
@@ -32,7 +33,7 @@ func GetScheduledGames(teamID string) map[string]ScheduledGame {
 	}
 	scheduledGameMap := map[string]ScheduledGame{}
 	for _, scheduledGame := range teamScheduleResult.LeagueNode.ScheduledGames {
-		if scheduledGame.StartDateEastern != "" && scheduledGame.StartTimeUTC != "" {
+		if scheduledGame.StartDateEastern != "" && scheduledGame.StartTimeUTC != "" && scheduledGame.GameID != "" {
 			scheduledGameMap[scheduledGame.StartDateEastern] = scheduledGame
 		}
 	}
