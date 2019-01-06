@@ -12,14 +12,16 @@ type TeamSchedule struct {
 		ScheduledGames []ScheduledGame `json:"standard"`
 	} `json:"league"`
 }
+
 type ScheduledGame struct {
 	GameID           string `json:"gameId"`
 	StartDateEastern string `json:"startDateEastern"`
 	StartTimeUTC     string `json:"startTimeUTC"`
 }
 
-func GetScheduledGames(teamID string) map[string]ScheduledGame {
-	url := fmt.Sprintf("http://data.nba.net/10s/prod/v1/2018/teams/%s/schedule.json", teamID)
+func GetScheduledGames(teamAPIPath, teamID string) map[string]ScheduledGame {
+	templateURI := MakeURIFormattable(NBAAPIBaseURI + teamAPIPath)
+	url := fmt.Sprintf(templateURI, teamID)
 	response, httpErr := http.Get(url)
 	if httpErr != nil {
 		log.Fatal(httpErr)

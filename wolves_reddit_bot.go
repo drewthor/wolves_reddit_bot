@@ -6,9 +6,10 @@ import (
 )
 
 func main() {
-	teams := nba.GetTeams()
+	dailyAPIPaths := nba.GetDailyAPIPaths()
+	teams := nba.GetTeams(dailyAPIPaths.Teams)
 	wolvesID := teams["MIN"].ID
-	scheduledGames := nba.GetScheduledGames(wolvesID)
+	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, wolvesID)
 	firstGameID := scheduledGames["20180929"].GameID
 	fmt.Println(scheduledGames)
 	fmt.Println(firstGameID)

@@ -1,14 +1,38 @@
 package nba
 
 import (
-//"encoding/json"
+	"encoding/json"
+	"log"
+	"net/http"
 )
 
-func GetNBAAPIDailyURL() string {
-	return "http://data.nba.net/10s/prod/v1/today.json"
+const NBADailyAPIPath = "/prod/v1/today.json"
+
+type DailyAPI struct {
+	APIPaths DailyAPIPaths `json:"links"`
 }
 
-type Daily struct {
-	CurrentDate string `json:"currentDate"`
-	TeamsURL    string `json:"teams"`
+type DailyAPIPaths struct {
+	CurrentDate  string `json:"currentDate"`
+	Teams        string `json:"teams"`
+	TeamSchedule string `json:"teamSchedule"`
+}
+
+func GetDailyAPIPaths() DailyAPIPaths {
+	url := NBAAPIBaseURI + NBADailyAPIPath
+	response, httpErr := http.Get(url)
+	if httpErr != nil {
+		log.Fatal(httpErr)
+	}
+	defer response.Body.Close()
+
+	dailyAPIResult := DailyAPI{}
+	decodeErr := json.NewDecoder(response.Body).Decode(&dailyAPIResult)
+	if decodeErr != nil {
+		log.Fatal(decodeErr)
+	}
+	if dailyAPIResult.APIPaths.CurrentDate == "" || dailyAPIResult.APIPaths.Teams == "" || dailyAPIResult.APIPaths.TeamSchedule == "" {
+		log.Fatal("Could not get daily API paths")
+	}
+	return dailyAPIResult.APIPaths
 }
