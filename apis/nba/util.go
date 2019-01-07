@@ -7,7 +7,7 @@ import (
 const NBAAPIBaseURI = "http://data.nba.net/10s"
 
 func MakeURIFormattable(uri string) string {
-	regex := regexp.MustCompile("({{[^}]+}})")
+	regex := regexp.MustCompile(`{{.+?}}`)
 	format := "%s"
 	formattedString := regex.ReplaceAllString(uri, format)
 	return formattedString
