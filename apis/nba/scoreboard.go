@@ -12,8 +12,21 @@ type Scoreboard struct {
 }
 
 type GameScoreboard struct {
-	Active bool   `json:"isGameActivated"`
-	ID     string `json:"gameId"`
+	Active       bool         `json:"isGameActivated"`
+	GameDuration GameDuration `json:"gameDuration"`
+	ID           string       `json:"gameId"`
+	Period       Period       `json:"period"`
+	StartTimeUTC string       `json:"startTimeUTC"`
+	EndTimeUTC   string       `json:"endTimeUTC,omitempty"`
+}
+
+type GameDuration struct {
+	Hours   string `json:"hours"`
+	Minutes string `json:"minutes"`
+}
+
+type Period struct {
+	Current int `json:"current"`
 }
 
 func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) GameScoreboard {
