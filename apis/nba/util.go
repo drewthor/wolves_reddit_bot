@@ -4,7 +4,7 @@ import (
 	"regexp"
 )
 
-const NBAAPIBaseURI = "http://data.nba.net/10s"
+const NBAAPIBaseURI = "http://data.nba.net"
 
 const TimeDayFormat = "20060102"
 

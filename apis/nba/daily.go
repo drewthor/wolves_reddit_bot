@@ -14,6 +14,7 @@ type DailyAPI struct {
 
 type DailyAPIPaths struct {
 	CurrentDate  string `json:"currentDate"`
+	Scoreboard   string `json:"scoreboard"`
 	Teams        string `json:"teams"`
 	TeamSchedule string `json:"teamSchedule"`
 }
@@ -31,7 +32,7 @@ func GetDailyAPIPaths() DailyAPIPaths {
 	if decodeErr != nil {
 		log.Fatal(decodeErr)
 	}
-	if dailyAPIResult.APIPaths.CurrentDate == "" || dailyAPIResult.APIPaths.Teams == "" || dailyAPIResult.APIPaths.TeamSchedule == "" {
+	if dailyAPIResult.APIPaths.CurrentDate == "" || dailyAPIResult.APIPaths.Teams == "" || dailyAPIResult.APIPaths.TeamSchedule == "" || dailyAPIResult.APIPaths.Scoreboard == "" {
 		log.Fatal("Could not get daily API paths")
 	}
 	return dailyAPIResult.APIPaths

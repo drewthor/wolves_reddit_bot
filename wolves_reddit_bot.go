@@ -7,15 +7,17 @@ import (
 )
 
 func main() {
-	currentTime := time.Now()
-	currentDate := currentTime.Format(nba.TimeDayFormat)
+	currentTimeUTC := time.Now().UTC()
+	fmt.Println(currentTimeUTC)
+	currentTimeEastern := time.Now().UTC()
+	currentDateEastern := currentTimeEastern.Format(nba.TimeDayFormat)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	wolvesID := teams["MIN"].ID
+	wolvesID := teams["OKC"].ID
 	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, wolvesID)
-	todaysGame, gameToday := scheduledGames[currentDate]
+	todaysGame, gameToday := scheduledGames[currentDateEastern]
 	if gameToday {
-		todaysGameID := todaysGame.GameID
-		fmt.Println(todaysGameID)
+		todaysGameScoreboard := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateEastern, todaysGame.GameID)
+		fmt.Println(todaysGameScoreboard)
 	}
 }
