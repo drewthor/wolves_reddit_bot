@@ -10,7 +10,12 @@ import (
 func main() {
 	currentTimeUTC := time.Now().UTC()
 	fmt.Println(currentTimeUTC)
-	currentTimeEastern := time.Now().UTC()
+	eastCoastLocation, locationError := time.LoadLocation("America/New_York")
+	if locationError != nil {
+		fmt.Println(locationError)
+	}
+	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
+	fmt.Println(currentTimeEastern)
 	currentDateEastern := currentTimeEastern.Format(nba.TimeDayFormat)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
