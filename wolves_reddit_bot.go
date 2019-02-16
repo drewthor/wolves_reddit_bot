@@ -31,7 +31,7 @@ func main() {
 				log.Fatal(err)
 			}
 			timeSinceGameEnded := currentTimeUTC.Sub(gameEndTime)
-			if timeSinceGameEnded.Minutes() < 20 {
+			if timeSinceGameEnded.Minutes() < 2 {
 				redditClient := reddit.Client{}
 				redditClient.Authorize()
 				// make post game thread
