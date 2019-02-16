@@ -6,17 +6,16 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	//"strconv"
 	"strings"
 	"time"
 )
 
-const RedditAuthorizationURI = "https://www.reddit.com/api/v1/access_token"
+const AuthorizationURI = "https://www.reddit.com/api/v1/access_token"
 
-const RedditConfigFile = "reddit_config.json"
+const ConfigFile = "reddit_config.json"
 
-func loadConfiguration(file string) RedditConfig {
-	var config RedditConfig
+func loadConfiguration(file string) Config {
+	var config Config
 	configFile, err := os.Open(file)
 	defer configFile.Close()
 	if err != nil {
@@ -27,34 +26,23 @@ func loadConfiguration(file string) RedditConfig {
 	return config
 }
 
-type RedditConfig struct {
+type Config struct {
 	Username     string `json:"username"`
 	Password     string `json:"password"`
 	ClientID     string `json:"clientID"`
 	ClientSecret string `json:"clientSecret"`
 }
 
-/* type ExpireTime struct {
-	time.Time
-}
-
-func (t *ExpireTime) UnmarshalJSON(b []byte) (err error) {
-	expireStr := string(b[:])
-	expireSeconds, err := strconv.Atoi(expireStr)
-	*t = ExpireTime{time.Now().Add(time.Duration(expireSeconds) * time.Second)}
-	return err
-} */
-
-type RedditToken struct {
+type Token struct {
 	Token                 string `json:"access_token"`
 	SecondsTillExpiration int    `json:"expires_in"`
 	expirationTime        time.Time
 }
 
 type Client struct {
-	config     RedditConfig
+	config     Config
 	httpClient *http.Client
-	token      RedditToken
+	token      Token
 }
 
 func (r *Client) initHttpClient() {
@@ -65,14 +53,14 @@ func (r *Client) initHttpClient() {
 
 func (r *Client) Authorize() {
 	r.initHttpClient()
-	r.config = loadConfiguration(RedditConfigFile)
+	r.config = loadConfiguration(ConfigFile)
 	form := url.Values{
 		"grant_type": {"password"},
 		"username":   {r.config.Username},
 		"password":   {r.config.Password},
 	}
 
-	req, err := http.NewRequest("POST", RedditAuthorizationURI, strings.NewReader(form.Encode()))
+	req, err := http.NewRequest("POST", AuthorizationURI, strings.NewReader(form.Encode()))
 	if err != nil {
 		log.Fatal(err.Error())
 	}
