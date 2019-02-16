@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
+	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
 	"log"
 	"time"
 )
@@ -30,10 +31,12 @@ func main() {
 				log.Fatal(err)
 			}
 			timeSinceGameEnded := currentTimeUTC.Sub(gameEndTime)
-			if timeSinceGameEnded.Minutes() < 1 {
+			if timeSinceGameEnded.Minutes() < 20 {
+				redditClient := reddit.Client{}
+				redditClient.Authorize()
 				// make post game thread
+				fmt.Println(redditClient)
 			}
 		}
-		fmt.Println(todaysGameScoreboard)
 	}
 }
