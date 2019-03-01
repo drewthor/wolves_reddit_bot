@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
 	"log"
@@ -10,13 +9,11 @@ import (
 
 func main() {
 	currentTimeUTC := time.Now().UTC()
-	fmt.Println(currentTimeUTC)
 	eastCoastLocation, locationError := time.LoadLocation("America/New_York")
 	if locationError != nil {
-		fmt.Println(locationError)
+		log.Fatal(locationError)
 	}
 	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
-	fmt.Println(currentTimeEastern)
 	currentDateEastern := currentTimeEastern.Format(nba.TimeDayFormat)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
@@ -34,8 +31,10 @@ func main() {
 			if timeSinceGameEnded.Minutes() < 2 {
 				redditClient := reddit.Client{}
 				redditClient.Authorize()
-				// make post game thread
-				fmt.Println(redditClient)
+				subreddit := "Test"
+				title := "test"
+				content := "correctly made post"
+				redditClient.SubmitNewPost(subreddit, title, content)
 			}
 		}
 	}

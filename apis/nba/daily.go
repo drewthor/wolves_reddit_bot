@@ -20,7 +20,7 @@ type DailyAPIPaths struct {
 }
 
 func GetDailyAPIPaths() DailyAPIPaths {
-	url := NBAAPIBaseURI + NBADailyAPIPath
+	url := nbaAPIBaseURI + NBADailyAPIPath
 	response, httpErr := http.Get(url)
 	if httpErr != nil {
 		log.Fatal(httpErr)

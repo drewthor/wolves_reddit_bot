@@ -21,7 +21,7 @@ type Team struct {
 }
 
 func GetTeams(teamsAPIPath string) map[string]Team {
-	uri := NBAAPIBaseURI + teamsAPIPath
+	uri := nbaAPIBaseURI + teamsAPIPath
 	response, httpErr := http.Get(uri)
 	if httpErr != nil {
 		log.Fatal(httpErr)

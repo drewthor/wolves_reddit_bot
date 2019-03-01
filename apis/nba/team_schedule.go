@@ -20,7 +20,7 @@ type ScheduledGame struct {
 }
 
 func GetScheduledGames(teamAPIPath, teamID string) map[string]ScheduledGame {
-	templateURI := MakeURIFormattable(NBAAPIBaseURI + teamAPIPath)
+	templateURI := makeURIFormattable(nbaAPIBaseURI + teamAPIPath)
 	url := fmt.Sprintf(templateURI, teamID)
 	response, httpErr := http.Get(url)
 	if httpErr != nil {

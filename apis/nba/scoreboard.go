@@ -30,7 +30,7 @@ type Period struct {
 }
 
 func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) GameScoreboard {
-	templateURI := MakeURIFormattable(NBAAPIBaseURI + scoreboardAPIPath)
+	templateURI := makeURIFormattable(nbaAPIBaseURI + scoreboardAPIPath)
 	url := fmt.Sprintf(templateURI, todaysDate)
 	response, httpErr := http.Get(url)
 	if httpErr != nil {
