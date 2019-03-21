@@ -1,9 +1,9 @@
 package pgt
 
 import (
-	"../apis/nba"
-	"../apis/reddit"
 	"context"
+	"github.com/drewthor/wolves_reddit_bot/apis/nba"
+	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
 	"log"
 	"time"
 )
