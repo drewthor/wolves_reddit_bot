@@ -1,19 +1,9 @@
-package main
+package pgt
 
 import (
-	"github.com/drewthor/commands/pgt"
-)
-
-func main() {
-	pgt.CreatePostGameThread()
-}
-
-/*package pgt
-
-import (
+	"../apis/nba"
+	"../apis/reddit"
 	"context"
-	"github.com/drewthor/wolves_reddit_bot/apis/nba"
-	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
 	"log"
 	"time"
 )
@@ -58,4 +48,4 @@ type event struct {
 func Receive(ctx context.Context, e event) {
 	CreatePostGameThread()
 	log.Printf("ran post game thread checker")
-}*/
+}
