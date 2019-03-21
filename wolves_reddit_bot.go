@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/drewthor/wolves_reddit_bot/commands/pgt"
+	"github.com/drewthor/wolves_reddit_bot/pgt"
 )
 
 func main() {
