@@ -1,17 +1,6 @@
-package main
+package pgt
 
 import (
-	"github.com/drewthor/wolves_reddit_bot/pgt"
-)
-
-func main() {
-	pgt.CreatePostGameThread()
-}
-
-/*package pgt
-
-import (
-	"context"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
 	"log"
@@ -50,12 +39,3 @@ func CreatePostGameThread() {
 		}
 	}
 }
-
-type event struct {
-	Data []byte
-}
-
-func Receive(ctx context.Context, e event) {
-	CreatePostGameThread()
-	log.Printf("ran post game thread checker")
-}*/
