@@ -13,7 +13,9 @@ type DailyAPI struct {
 }
 
 type DailyAPIPaths struct {
+	Boxscore     string `json:"boxscore"`
 	CurrentDate  string `json:"currentDate"`
+	Players      string `json:"leagueRosterPlayers"`
 	Scoreboard   string `json:"scoreboard"`
 	Teams        string `json:"teams"`
 	TeamSchedule string `json:"teamSchedule"`

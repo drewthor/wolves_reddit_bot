@@ -38,12 +38,12 @@ func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) Game
 	}
 	defer response.Body.Close()
 
-	scoreboardAPIResult := Scoreboard{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&scoreboardAPIResult)
+	scoreboardResult := Scoreboard{}
+	decodeErr := json.NewDecoder(response.Body).Decode(&scoreboardResult)
 	if decodeErr != nil {
 		log.Fatal(decodeErr)
 	}
-	for _, game := range scoreboardAPIResult.Games {
+	for _, game := range scoreboardResult.Games {
 		if game.ID == gameID {
 			return game
 		}
