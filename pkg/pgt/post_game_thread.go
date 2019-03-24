@@ -27,13 +27,13 @@ func CreatePostGameThread() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			timeSinceGameEnded := currentTimeUTC.Sub(gameEndTime)
+			timeSinceGameEnded := currentTimeEastern.Sub(gameEndTime)
 			if timeSinceGameEnded.Minutes() < 2 {
 				redditClient := reddit.Client{}
 				redditClient.Authorize()
 				subreddit := "SeattleSockeye"
-				title := "test"
 				boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateEastern, todaysGame.GameID)
+				title := boxscore.GetRedditPostGameThreadTitle("MIN", teams)
 				content := boxscore.GetRedditBodyString(nba.GetPlayers(dailyAPIPaths.Players))
 				redditClient.SubmitNewPost(subreddit, title, content)
 			}

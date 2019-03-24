@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 )
 
 type Boxscore struct {
@@ -17,8 +18,10 @@ type Boxscore struct {
 		} `json:"vTeam"`
 		PlayersStats []PlayerStats `json:"activePlayers"`
 	} `json:"stats"`
-	HomeTeam TeamBoxscoreInfo `json:"hTeam"`
-	AwayTeam TeamBoxscoreInfo `json:"vTeam"`
+	BasicGameDataNode struct {
+		HomeTeamInfo TeamBoxscoreInfo `json:"hTeam"`
+		AwayTeamInfo TeamBoxscoreInfo `json:"vTeam"`
+	} `json:"basicGameData"`
 }
 
 func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamStats, players map[string]Player, playersStats []PlayerStats) string {
@@ -27,12 +30,12 @@ func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats Te
 	playerStatsString := "%s. %s|%s|%s-%s|%s-%s|%s-%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|\n"
 	totalsString := "Totals|%s|%s-%s(%s%%)|%s-%s(%s%%)|%s-%s(%s%%)|-|%s|%s|%s|%s|%s|%s|%s|%s|\n"
 	teamStatsTableString := ""
-	teamStatsTableString += fmt.Sprintf(columnHeader, teamBoxscoreInfo.AbbreviatedName, teamBoxscoreInfo.AbbreviatedName)
+	teamStatsTableString += fmt.Sprintf(columnHeader, teamBoxscoreInfo.TriCode, teamBoxscoreInfo.TriCode)
 	teamStatsTableString += columnHeaderSeparator
 	for _, playerStats := range playersStats {
 		if playerStats.TeamID == teamBoxscoreInfo.TeamID {
 			player := players[playerStats.ID]
-			teamStatsTableString += fmt.Sprintf(playerStatsString, player.FirstName[1], player.LastName, playerStats.Minutes, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.PlusMinus, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Blocks, playerStats.Steals, playerStats.Turnovers, playerStats.PersonalFouls, playerStats.Points)
+			teamStatsTableString += fmt.Sprintf(playerStatsString, player.FirstName[:1], player.LastName, playerStats.Minutes, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.PlusMinus, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Blocks, playerStats.Steals, playerStats.Turnovers, playerStats.PersonalFouls, playerStats.Points)
 		}
 	}
 	teamStatsTableString += fmt.Sprintf(totalsString, teamStats.Minutes, teamStats.FieldGoalsMade, teamStats.FieldGoalsAttempted, teamStats.FieldGoalPercentage, teamStats.FreeThrowsMade, teamStats.FreeThrowsAttempted, teamStats.FreeThrowPercentage, teamStats.ThreePointsMade, teamStats.ThreePointsAttempted, teamStats.ThreePointPercentage, teamStats.OffensiveRebounds, teamStats.TotalRebounds, teamStats.Assists, teamStats.Blocks, teamStats.Steals, teamStats.Turnovers, teamStats.PersonalFouls, teamStats.Points)
@@ -40,23 +43,78 @@ func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats Te
 }
 
 func (b *Boxscore) GetRedditBodyString(players map[string]Player) string {
-	bodyString := ""
-	bodyString += get_team_stats_table_string(b.HomeTeam, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
-	bodyString += "\n"
-	bodyString += get_team_stats_table_string(b.AwayTeam, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
-	bodyString += "\n"
-	bodyString += "||"
-	bodyString += "|:-:|"
-	return bodyString
+	body := ""
+	body += get_team_stats_table_string(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += "\n"
+	body += get_team_stats_table_string(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += "\n"
+	return body
+}
+
+func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode string, teams map[string]Team) string {
+	title := ""
+	firstTeam := Team{}
+	firstTeamStats := TeamStats{}
+	firstTeamInfo := TeamBoxscoreInfo{}
+	secondTeam := Team{}
+	secondTeamStats := TeamStats{}
+	secondTeamInfo := TeamBoxscoreInfo{}
+	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
+		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		firstTeamStats = b.StatsNode.HomeTeamNode.TeamStats
+		firstTeamInfo = b.BasicGameDataNode.HomeTeamInfo
+		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		secondTeamStats = b.StatsNode.AwayTeamNode.TeamStats
+		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
+	} else {
+		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		firstTeamStats = b.StatsNode.AwayTeamNode.TeamStats
+		firstTeamInfo = b.BasicGameDataNode.AwayTeamInfo
+		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		secondTeamStats = b.StatsNode.HomeTeamNode.TeamStats
+		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
+	}
+	firstTeamWon := firstTeamStats.Points > secondTeamStats.Points
+	teamRecordString := "(%s-%s)"
+	title += "[POST GAME THREAD]"
+	title += " "
+	title += strings.ToUpper(firstTeam.Nickname)
+	title += " "
+	title += fmt.Sprintf(teamRecordString, firstTeamInfo.Wins, firstTeamInfo.Losses)
+	title += " "
+	if firstTeamWon {
+		title += "BEAT THE"
+	} else {
+		title += "FALL TO THE"
+	}
+	title += " "
+	title += strings.ToUpper(secondTeam.Nickname)
+	title += " "
+	title += fmt.Sprintf(teamRecordString, secondTeamInfo.Wins, secondTeamInfo.Losses)
+	title += " "
+	title += firstTeamStats.Points + "-" + secondTeamStats.Points
+	title += ","
+	title += " "
+	if firstTeamInfo.SeriesWin == firstTeamInfo.SeriesLosses {
+		title += "SERIES TIED"
+	} else if firstTeamInfo.SeriesWin < firstTeamInfo.SeriesLosses {
+		title += "TRAIL SERIES"
+	} else {
+		title += "LEAD SERIES"
+	}
+	title += " "
+	title += firstTeamInfo.SeriesWin + "-" + firstTeamInfo.SeriesLosses
+
+	return title
 }
 
 type TeamBoxscoreInfo struct {
-	TeamID          string `json:"teamId"`
-	AbbreviatedName string `json:"triCode"`
-	Wins            string `json:"win"`
-	Loss            string `json:"loss"`
-	SeriesWin       string `json:"seriesWin"`
-	SeriesLoss      string `json:"seriesLoss"`
+	TeamID       string `json:"teamId"`
+	TriCode      string `json:"triCode"`
+	Wins         string `json:"win"`
+	Losses       string `json:"loss"`
+	SeriesWin    string `json:"seriesWin"`
+	SeriesLosses string `json:"seriesLoss"`
 }
 
 type TeamStats struct {
