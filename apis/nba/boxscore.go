@@ -51,7 +51,7 @@ func (b *Boxscore) GetRedditBodyString(players map[string]Player) string {
 	return body
 }
 
-func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode string, teams map[string]Team) string {
+func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
 	title := ""
 	firstTeam := Team{}
 	firstTeamStats := TeamStats{}
@@ -109,12 +109,12 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode string, teams map[st
 }
 
 type TeamBoxscoreInfo struct {
-	TeamID       string `json:"teamId"`
-	TriCode      string `json:"triCode"`
-	Wins         string `json:"win"`
-	Losses       string `json:"loss"`
-	SeriesWin    string `json:"seriesWin"`
-	SeriesLosses string `json:"seriesLoss"`
+	TeamID       string  `json:"teamId"`
+	TriCode      TriCode `json:"triCode"`
+	Wins         string  `json:"win"`
+	Losses       string  `json:"loss"`
+	SeriesWin    string  `json:"seriesWin"`
+	SeriesLosses string  `json:"seriesLoss"`
 }
 
 type TeamStats struct {

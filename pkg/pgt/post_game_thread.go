@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func CreatePostGameThread() {
+func CreatePostGameThread(teamTriCode nba.TriCode) {
 	currentTimeUTC := time.Now().UTC()
 	eastCoastLocation, locationError := time.LoadLocation("America/New_York")
 	if locationError != nil {
@@ -17,7 +17,7 @@ func CreatePostGameThread() {
 	currentDateEastern := currentTimeEastern.Format(nba.TimeDayFormat)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	wolvesID := teams["MIN"].ID
+	wolvesID := teams[teamTriCode].ID
 	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, wolvesID)
 	todaysGame, gameToday := scheduledGames[currentDateEastern]
 	if gameToday {
@@ -33,7 +33,7 @@ func CreatePostGameThread() {
 				redditClient.Authorize()
 				subreddit := "SeattleSockeye"
 				boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateEastern, todaysGame.GameID)
-				title := boxscore.GetRedditPostGameThreadTitle("MIN", teams)
+				title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 				content := boxscore.GetRedditBodyString(nba.GetPlayers(dailyAPIPaths.Players))
 				redditClient.SubmitNewPost(subreddit, title, content)
 			}

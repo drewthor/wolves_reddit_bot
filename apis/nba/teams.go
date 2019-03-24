@@ -13,14 +13,14 @@ type TeamsResult struct {
 }
 
 type Team struct {
-	IsNBAFranchise bool   `json:"isNBAFranchise"`
-	ID             string `json:"teamId"`
-	TriCode        string `json:"tricode"`
-	FullName       string `json:"fullName"`
-	Nickname       string `json:"nickname"`
+	IsNBAFranchise bool    `json:"isNBAFranchise"`
+	ID             string  `json:"teamId"`
+	TriCode        TriCode `json:"tricode"`
+	FullName       string  `json:"fullName"`
+	Nickname       string  `json:"nickname"`
 }
 
-func GetTeams(teamsAPIPath string) map[string]Team {
+func GetTeams(teamsAPIPath string) map[TriCode]Team {
 	url := nbaAPIBaseURI + teamsAPIPath
 	response, httpErr := http.Get(url)
 	if httpErr != nil {
@@ -33,7 +33,7 @@ func GetTeams(teamsAPIPath string) map[string]Team {
 	if decodeErr != nil {
 		log.Fatal(decodeErr)
 	}
-	teamMap := map[string]Team{}
+	teamMap := map[TriCode]Team{}
 	for _, team := range teamsResult.LeagueNode.Teams {
 		if team.IsNBAFranchise {
 			teamMap[team.TriCode] = team
