@@ -1,6 +1,7 @@
 package pgt
 
 import (
+	"fmt"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
 	"log"
@@ -17,18 +18,25 @@ func CreatePostGameThread(teamTriCode nba.TriCode) {
 	currentDateEastern := currentTimeEastern.Format(nba.TimeDayFormat)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	wolvesID := teams[teamTriCode].ID
-	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, wolvesID)
+	teamID := teams[teamTriCode].ID
+	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, teamID)
 	todaysGame, gameToday := scheduledGames[currentDateEastern]
 	if gameToday {
+		log.Println("game today")
 		todaysGameScoreboard := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateEastern, todaysGame.GameID)
 		if todaysGameScoreboard.EndTimeUTC != "" {
-			gameEndTime, err := time.Parse(nba.UTCFormat, todaysGameScoreboard.EndTimeUTC)
+			log.Print("current time: ")
+			log.Print(currentTimeUTC)
+			gameEndTimeUTC, err := time.Parse(nba.UTCFormat, todaysGameScoreboard.EndTimeUTC)
 			if err != nil {
 				log.Fatal(err)
 			}
-			timeSinceGameEnded := currentTimeEastern.Sub(gameEndTime)
+			log.Print("gameEndTime: ")
+			log.Print(gameEndTimeUTC)
+			timeSinceGameEnded := currentTimeUTC.Sub(gameEndTimeUTC)
+			log.Println(fmt.Sprintf("timeSinceGameEnded: %fmin %fsec", timeSinceGameEnded.Minutes(), timeSinceGameEnded.Seconds()))
 			if timeSinceGameEnded.Minutes() < 2 {
+				log.Println("making post")
 				redditClient := reddit.Client{}
 				redditClient.Authorize()
 				subreddit := "SeattleSockeye"

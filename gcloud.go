@@ -13,7 +13,7 @@ type event struct {
 
 func Receive(ctx context.Context, e event) error {
 	pgt.CreatePostGameThread(nba.MinnesotaTimberwolves)
-	pgt.CreatePostGameThread(nba.MilwaukeeBucks)
+	pgt.CreatePostGameThread(nba.OklahomaCityThunder)
 	log.Printf("ran post game thread checker")
 	return nil
 }
