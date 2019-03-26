@@ -16,3 +16,4 @@ reddit_config.json
 
 #Google cloud platform
 .gcloudignore
+.env.yaml

@@ -61,10 +61,14 @@ func (c *Client) loadConfiguration(file string) {
 	configFile, err := os.Open(file)
 	defer configFile.Close()
 	if err != nil {
-		log.Fatal(err.Error())
+		c.userConfig.Username = os.Getenv("username")
+		c.userConfig.Password = os.Getenv("password")
+		c.userConfig.ClientID = os.Getenv("clientID")
+		c.userConfig.ClientSecret = os.Getenv("clientSecret")
+	} else {
+		jsonParser := json.NewDecoder(configFile)
+		jsonParser.Decode(&c.userConfig)
 	}
-	jsonParser := json.NewDecoder(configFile)
-	jsonParser.Decode(&c.userConfig)
 	c.config = &oauth2.Config{
 		ClientID:     c.userConfig.ClientID,
 		ClientSecret: c.userConfig.ClientSecret,

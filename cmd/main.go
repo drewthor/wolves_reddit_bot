@@ -7,4 +7,5 @@ import (
 
 func main() {
 	pgt.CreatePostGameThread(nba.MinnesotaTimberwolves)
+	pgt.CreatePostGameThread(nba.MilwaukeeBucks)
 }
