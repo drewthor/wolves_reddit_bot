@@ -84,14 +84,29 @@ func incrementString(str string) string {
 }
 
 func (b *Boxscore) UpdateSeriesRecord() {
-	// the nba does not appear to update the series wins and losses after the game for either team; update them based on the result of the game
+	// the nba does not appear to update the series wins and losses right after the game for either team; update them based on the result of the game
+	// they do eventually update the series wins and losses, but by then we should have already posted the thread
 	homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
 	if homeTeamWon {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
 		b.BasicGameDataNode.AwayTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesLosses)
+
+		if b.IsPlayoffGame() {
+			b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
+			if b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins == "4" {
+				b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.WonSeries = true
+			}
+		}
 	} else {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesLosses)
 		b.BasicGameDataNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesWins)
+
+		if b.IsPlayoffGame() {
+			b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
+			if b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins == "4" {
+				b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.WonSeries = true
+			}
+		}
 	}
 }
 
@@ -220,7 +235,15 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 		title += " "
 	}
 
-	if firstTeamWon && blowout {
+	if b.IsPlayoffGame() && b.BasicGameDataNode.PlayoffsNode.GameInSeries == "6" && firstTeamWon {
+		title += "FORCE GAME 7 AGAINST THE"
+	} else if b.IsPlayoffGame() && secondTeamPlayoffsGameTeamInfo.SeriesWins == "3" && firstTeamWon {
+		title += "SURVIVE AGAINST THE"
+	} else if b.IsPlayoffGame() && firstTeamWon && secondTeamPlayoffsGameTeamInfo.SeriesWins == "0" && firstTeamPlayoffsGameTeamInfo.WonSeries {
+		title += "SWEEP THE"
+	} else if b.IsPlayoffGame() && !firstTeamWon && firstTeamPlayoffsGameTeamInfo.SeriesWins == "0" && secondTeamPlayoffsGameTeamInfo.WonSeries {
+		title += "GET SWEPT BY THE"
+	} else if firstTeamWon && blowout {
 		title += "BLOWOUT THE"
 	} else if firstTeamWon {
 		title += "BEAT THE"
