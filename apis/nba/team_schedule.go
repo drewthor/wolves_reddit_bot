@@ -14,12 +14,36 @@ type TeamSchedule struct {
 }
 
 type ScheduledGame struct {
-	GameID           string `json:"gameId"`
-	StartDateEastern string `json:"startDateEastern"`
-	StartTimeUTC     string `json:"startTimeUTC"`
+	GameID           string            `json:"gameId"`
+	StartDateEastern string            `json:"startDateEastern"`
+	StartTimeUTC     string            `json:"startTimeUTC"`
+	PlayoffsNode     *PlayoffsGameInfo `json:"playoffs,omitempty"`
 }
 
-func GetScheduledGames(teamAPIPath, teamID string) map[string]ScheduledGame {
+func (s ScheduledGame) IsPlayoffGame() bool {
+	return s.PlayoffsNode == nil
+}
+
+type PlayoffsGameInfo struct {
+	Round           string               `json:"roundNum"`
+	Conference      string               `json:"confName"`
+	SeriesID        string               `json:"seriesId"`
+	SeriesCompleted bool                 `json:"isSeriesCompleted"`
+	GameInSeries    string               `json:"gameNumInSeries"`
+	IsIfNecessary   bool                 `json:"isIfNecessary"`
+	HomeTeamInfo    PlayoffsGameTeamInfo `json:"hTeam"`
+	AwayTeamInfo    PlayoffsGameTeamInfo `json:"vTeam"`
+}
+
+type PlayoffsGameTeamInfo struct {
+	Seed       string `json:"seedNum"`
+	SeriesWins string `json:"seriesWin"`
+	WonSeries  bool   `json:"isSeriesWinner"`
+}
+
+type ScheduledGames map[string]ScheduledGame
+
+func GetScheduledGames(teamAPIPath, teamID string) ScheduledGames {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + teamAPIPath)
 	url := fmt.Sprintf(templateURI, teamID)
 	response, httpErr := http.Get(url)
@@ -40,4 +64,18 @@ func GetScheduledGames(teamAPIPath, teamID string) map[string]ScheduledGame {
 		}
 	}
 	return scheduledGameMap
+}
+
+func (s *ScheduledGames) HaveAnotherMatchup(opposingTeam TriCode, todaysDate string) bool {
+	for _, scheduledGame := range *s {
+		isFutureGame := scheduledGame.StartDateEastern > todaysDate
+		if scheduledGame.IsPlayoffGame() {
+			if !scheduledGame.PlayoffsNode.SeriesCompleted && !scheduledGame.PlayoffsNode.IsIfNecessary {
+				return true
+			}
+		} else if isFutureGame {
+			return true
+		}
+	}
+	return false
 }

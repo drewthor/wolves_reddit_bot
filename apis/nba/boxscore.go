@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
 type Boxscore struct {
-	StatsNode struct {
+	StatsNode *struct {
 		HomeTeamNode struct {
 			TeamStats TeamStats `json:"totals"`
 		} `json:"hTeam"`
@@ -17,11 +19,80 @@ type Boxscore struct {
 			TeamStats TeamStats `json:"totals"`
 		} `json:"vTeam"`
 		PlayersStats []PlayerStats `json:"activePlayers"`
-	} `json:"stats"`
+	} `json:"stats,omitempty"`
 	BasicGameDataNode struct {
-		HomeTeamInfo TeamBoxscoreInfo `json:"hTeam"`
-		AwayTeamInfo TeamBoxscoreInfo `json:"vTeam"`
+		Clock          string            `json:"clock"`
+		GameIsActive   bool              `json:"isGameActivated"`
+		GameEndTimeUTC string            `json:"endTimeUTC,omitempty"`
+		HomeTeamInfo   TeamBoxscoreInfo  `json:"hTeam"`
+		AwayTeamInfo   TeamBoxscoreInfo  `json:"vTeam"`
+		PlayoffsNode   *PlayoffsGameInfo `json:"playoffs"`
+
+		PeriodNode struct {
+			CurrentPeriod int `json:"current"`
+		} `json:"period"`
 	} `json:"basicGameData"`
+}
+
+func (b *Boxscore) IsPlayoffGame() bool {
+	return b.BasicGameDataNode.PlayoffsNode != nil
+}
+
+func (b *Boxscore) GameEnded() bool {
+	if b.StatsNode == nil {
+		// the nba api will post a boxscore without the stats json node for some time before games
+		return false
+	}
+	hasEndTime := b.BasicGameDataNode.GameEndTimeUTC != ""
+	if hasEndTime {
+		log.Println("endTimeUTC reported")
+		return true
+	}
+	noTimeRemaining := b.BasicGameDataNode.Clock == "0.0" || b.BasicGameDataNode.Clock == ""
+	gameNotTied := b.StatsNode.HomeTeamNode.TeamStats.Points != b.StatsNode.AwayTeamNode.TeamStats.Points
+	log.Println(fmt.Sprintf("clock: %s", b.BasicGameDataNode.Clock))
+	log.Println(fmt.Sprintf("noTimeRemaining: %t", noTimeRemaining))
+	log.Println(fmt.Sprintf("gameNotTied: %t", gameNotTied))
+	gameEndingPeriod := b.BasicGameDataNode.PeriodNode.CurrentPeriod >= 4
+	log.Println(fmt.Sprintf("currentPeriod: %d", b.BasicGameDataNode.PeriodNode.CurrentPeriod))
+	log.Println(fmt.Sprintf("gameEndPeriod: %t", gameEndingPeriod))
+	if noTimeRemaining && gameNotTied && gameEndingPeriod {
+		return true
+	}
+	return false
+}
+
+func (b *Boxscore) GetOpponent(team TriCode) TriCode {
+	if b.BasicGameDataNode.HomeTeamInfo.TriCode == team {
+		return b.BasicGameDataNode.AwayTeamInfo.TriCode
+	} else {
+		return b.BasicGameDataNode.HomeTeamInfo.TriCode
+	}
+}
+
+func incrementString(str string) string {
+	// convert string to a number
+	i, _ := strconv.Atoi(str)
+
+	// add one to the number
+	i = i + 1
+
+	// convert number back to string
+	str = strconv.FormatInt(int64(i), 10)
+
+	return str
+}
+
+func (b *Boxscore) UpdateSeriesRecord() {
+	// the nba does not appear to update the series wins and losses after the game for either team; update them based on the result of the game
+	homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
+	if homeTeamWon {
+		b.BasicGameDataNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
+		b.BasicGameDataNode.AwayTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesLosses)
+	} else {
+		b.BasicGameDataNode.HomeTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesLosses)
+		b.BasicGameDataNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesWins)
+	}
 }
 
 func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamStats, players map[string]Player, playersStats []PlayerStats) string {
@@ -35,7 +106,19 @@ func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats Te
 	for _, playerStats := range playersStats {
 		if playerStats.TeamID == teamBoxscoreInfo.TeamID {
 			player := players[playerStats.ID]
-			teamStatsTableString += fmt.Sprintf(playerStatsString, player.FirstName[:1], player.LastName, playerStats.Minutes, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.PlusMinus, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Blocks, playerStats.Steals, playerStats.Turnovers, playerStats.PersonalFouls, playerStats.Points)
+			firstInitial := ""
+			lastName := ""
+			if player.FirstName == "" {
+				log.Println(player)
+				log.Println(playerStats.ID)
+				log.Println(playerStats)
+				firstInitial = ""
+				lastName = ""
+			} else {
+				firstInitial = player.FirstName[:1]
+				lastName = player.LastName
+			}
+			teamStatsTableString += fmt.Sprintf(playerStatsString, firstInitial, lastName, playerStats.Minutes, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.PlusMinus, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Blocks, playerStats.Steals, playerStats.Turnovers, playerStats.PersonalFouls, playerStats.Points)
 		}
 	}
 	teamStatsTableString += fmt.Sprintf(totalsString, teamStats.Minutes, teamStats.FieldGoalsMade, teamStats.FieldGoalsAttempted, teamStats.FieldGoalPercentage, teamStats.FreeThrowsMade, teamStats.FreeThrowsAttempted, teamStats.FreeThrowPercentage, teamStats.ThreePointsMade, teamStats.ThreePointsAttempted, teamStats.ThreePointPercentage, teamStats.OffensiveRebounds, teamStats.TotalRebounds, teamStats.Assists, teamStats.Blocks, teamStats.Steals, teamStats.Turnovers, teamStats.PersonalFouls, teamStats.Points)
@@ -51,14 +134,16 @@ func (b *Boxscore) GetRedditBodyString(players map[string]Player) string {
 	return body
 }
 
-func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
+func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team, haveMoreMatchups bool) string {
 	title := ""
 	firstTeam := Team{}
 	firstTeamStats := TeamStats{}
 	firstTeamInfo := TeamBoxscoreInfo{}
+	firstTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	secondTeam := Team{}
 	secondTeamStats := TeamStats{}
 	secondTeamInfo := TeamBoxscoreInfo{}
+	secondTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
 		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
 		firstTeamStats = b.StatsNode.HomeTeamNode.TeamStats
@@ -66,6 +151,11 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
 		secondTeamStats = b.StatsNode.AwayTeamNode.TeamStats
 		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
+
+		if b.IsPlayoffGame() {
+			firstTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo
+			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
+		}
 	} else {
 		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
 		firstTeamStats = b.StatsNode.AwayTeamNode.TeamStats
@@ -73,37 +163,128 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
 		secondTeamStats = b.StatsNode.HomeTeamNode.TeamStats
 		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
+
+		if b.IsPlayoffGame() {
+			firstTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
+			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo
+		}
 	}
 	firstTeamWon := firstTeamStats.Points > secondTeamStats.Points
+
+	firstTeamPointsInt, err := strconv.Atoi(firstTeamStats.Points)
+	if err != nil {
+		log.Fatal("could not convert team's points string to int")
+	}
+	secondTeamPointsInt, err := strconv.Atoi(secondTeamStats.Points)
+	if err != nil {
+		log.Fatal("could not convert team's points string to int")
+	}
+
+	// Specific game details; blowout, overtime, etc.
+	pointDifferential := math.Abs(float64(firstTeamPointsInt) - float64(secondTeamPointsInt))
+	blowoutDifferential := 20
+	blowout := pointDifferential >= float64(blowoutDifferential)
+	overtime := b.BasicGameDataNode.PeriodNode.CurrentPeriod > 4
+
 	teamRecordString := "(%s-%s)"
+
 	title += "[POST GAME THREAD]"
 	title += " "
+
+	if b.IsPlayoffGame() {
+		playoffsRoundInt, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.Round)
+		if err != nil {
+			log.Fatal(fmt.Sprintf("could not convert playoff round %s to int", b.BasicGameDataNode.PlayoffsNode.Round))
+		}
+
+		if playoffsRoundInt == 2 {
+			title += fmt.Sprintf("%sERN CONF SEMIS", b.BasicGameDataNode.PlayoffsNode.Conference)
+		} else if playoffsRoundInt == 3 {
+			title += fmt.Sprintf("%sERN CONF FINALS", b.BasicGameDataNode.PlayoffsNode.Conference)
+		} else if playoffsRoundInt == 4 {
+			title += "NBA FINALS"
+		} else {
+			title += fmt.Sprintf("Playoffs Round %d", playoffsRoundInt)
+		}
+		title += ":"
+		title += " "
+		title += fmt.Sprintf("(%s)", firstTeamPlayoffsGameTeamInfo.Seed)
+		title += " "
+	}
+
 	title += strings.ToUpper(firstTeam.Nickname)
 	title += " "
-	title += fmt.Sprintf(teamRecordString, firstTeamInfo.Wins, firstTeamInfo.Losses)
-	title += " "
-	if firstTeamWon {
+
+	if !b.IsPlayoffGame() {
+		title += fmt.Sprintf(teamRecordString, firstTeamInfo.Wins, firstTeamInfo.Losses)
+		title += " "
+	}
+
+	if firstTeamWon && blowout {
+		title += "BLOWOUT THE"
+	} else if firstTeamWon {
 		title += "BEAT THE"
+	} else if !firstTeamWon && blowout {
+		title += "GET BLOWN OUT BY THE"
 	} else {
-		title += "FALL TO THE"
+		// first team lost but did not get blown out
+		title += "LOSE TO THE"
 	}
 	title += " "
+
+	if b.IsPlayoffGame() {
+		title += fmt.Sprintf("(%s)", secondTeamPlayoffsGameTeamInfo.Seed)
+		title += " "
+	}
+
 	title += strings.ToUpper(secondTeam.Nickname)
 	title += " "
-	title += fmt.Sprintf(teamRecordString, secondTeamInfo.Wins, secondTeamInfo.Losses)
-	title += " "
+
+	if !b.IsPlayoffGame() {
+		title += fmt.Sprintf(teamRecordString, secondTeamInfo.Wins, secondTeamInfo.Losses)
+		title += " "
+	}
+
+	if overtime {
+		title += fmt.Sprintf("IN %dOT", b.BasicGameDataNode.PeriodNode.CurrentPeriod-4)
+		title += " "
+	}
+
 	title += firstTeamStats.Points + "-" + secondTeamStats.Points
 	title += ","
 	title += " "
-	if firstTeamInfo.SeriesWin == firstTeamInfo.SeriesLosses {
-		title += "SERIES TIED"
-	} else if firstTeamInfo.SeriesWin < firstTeamInfo.SeriesLosses {
-		title += "TRAIL SERIES"
-	} else {
-		title += "LEAD SERIES"
+
+	if b.IsPlayoffGame() {
+		// Playoff series info
+		log.Println(fmt.Sprintf("%s: %s", firstTeamInfo.TriCode, firstTeamPlayoffsGameTeamInfo.SeriesWins))
+		log.Println(fmt.Sprintf("%s: %s", secondTeamInfo.TriCode, secondTeamPlayoffsGameTeamInfo.SeriesWins))
+		if firstTeamPlayoffsGameTeamInfo.SeriesWins == secondTeamPlayoffsGameTeamInfo.SeriesWins {
+			if haveMoreMatchups {
+				if firstTeamWon {
+					title += "TIE SERIES"
+				} else {
+					title += "SERIES TIED"
+				}
+			} else {
+				log.Fatal("a playoff series can't end tied")
+			}
+		} else if firstTeamPlayoffsGameTeamInfo.SeriesWins < secondTeamPlayoffsGameTeamInfo.SeriesWins {
+			if haveMoreMatchups {
+				title += "TRAIL SERIES"
+			} else {
+				title += "LOSE SERIES"
+			}
+		} else {
+			// first team leading series
+			if haveMoreMatchups {
+				title += "LEAD SERIES"
+			} else {
+				title += "WIN SERIES"
+			}
+		}
+		title += " "
+		title += "(" + firstTeamInfo.SeriesWins + "-" + firstTeamInfo.SeriesLosses + ")"
 	}
-	title += " "
-	title += firstTeamInfo.SeriesWin + "-" + firstTeamInfo.SeriesLosses
 
 	return title
 }
@@ -113,7 +294,7 @@ type TeamBoxscoreInfo struct {
 	TriCode      TriCode `json:"triCode"`
 	Wins         string  `json:"win"`
 	Losses       string  `json:"loss"`
-	SeriesWin    string  `json:"seriesWin"`
+	SeriesWins   string  `json:"seriesWin"`
 	SeriesLosses string  `json:"seriesLoss"`
 }
 
@@ -168,6 +349,7 @@ type PlayerStats struct {
 func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + boxscoreAPIPath)
 	url := fmt.Sprintf(templateURI, todaysDate, gameID)
+	log.Println(url)
 	response, httpErr := http.Get(url)
 	if httpErr != nil {
 		log.Fatal(httpErr)
@@ -178,6 +360,9 @@ func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
 	decodeErr := json.NewDecoder(response.Body).Decode(&boxscoreResult)
 	if decodeErr != nil {
 		log.Fatal(decodeErr)
+	}
+	if boxscoreResult.GameEnded() {
+		boxscoreResult.UpdateSeriesRecord()
 	}
 	return boxscoreResult
 }

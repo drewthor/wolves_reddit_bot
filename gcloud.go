@@ -3,7 +3,7 @@ package gcloud
 import (
 	"context"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
-	"github.com/drewthor/wolves_reddit_bot/pkg/pgt"
+	"github.com/drewthor/wolves_reddit_bot/pkg/gfunctions"
 	"log"
 )
 
@@ -12,8 +12,7 @@ type event struct {
 }
 
 func Receive(ctx context.Context, e event) error {
-	pgt.CreatePostGameThread(nba.MinnesotaTimberwolves)
-	pgt.CreatePostGameThread(nba.OklahomaCityThunder)
+	gfunctions.CreatePostGameThread(nba.MilwaukeeBucks)
 	log.Printf("ran post game thread checker")
 	return nil
 }
