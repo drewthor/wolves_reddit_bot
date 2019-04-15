@@ -184,7 +184,6 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo
 		}
 	}
-	firstTeamWon := firstTeamStats.Points > secondTeamStats.Points
 
 	firstTeamPointsInt, err := strconv.Atoi(firstTeamStats.Points)
 	if err != nil {
@@ -194,6 +193,8 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 	if err != nil {
 		log.Fatal("could not convert team's points string to int")
 	}
+	
+	firstTeamWon := firstTeamPointsInt > secondTeamPointsInt
 
 	// Specific game details; blowout, overtime, etc.
 	pointDifferential := math.Abs(float64(firstTeamPointsInt) - float64(secondTeamPointsInt))

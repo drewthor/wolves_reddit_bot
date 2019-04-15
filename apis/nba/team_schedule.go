@@ -21,7 +21,7 @@ type ScheduledGame struct {
 }
 
 func (s ScheduledGame) IsPlayoffGame() bool {
-	return s.PlayoffsNode == nil
+	return s.PlayoffsNode != nil
 }
 
 type PlayoffsGameInfo struct {
