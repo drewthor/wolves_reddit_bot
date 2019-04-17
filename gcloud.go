@@ -13,6 +13,7 @@ type event struct {
 
 func Receive(ctx context.Context, e event) error {
 	gfunctions.CreatePostGameThread(nba.MilwaukeeBucks)
+gfunctions.CreatePostGameThread(nba.OklahomaCityThunder)
 	log.Printf("ran post game thread checker")
 	return nil
 }
