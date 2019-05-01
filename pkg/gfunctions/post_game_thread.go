@@ -1,11 +1,12 @@
 package gfunctions
 
 import (
+	"log"
+	"time"
+
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
 	"github.com/drewthor/wolves_reddit_bot/pkg/gcloud"
-	"log"
-	"time"
 )
 
 func CreatePostGameThread(teamTriCode nba.TriCode) {
@@ -47,12 +48,12 @@ func CreatePostGameThread(teamTriCode nba.TriCode) {
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
 			subreddit := "SeattleSockeye"
-			opponent := boxscore.GetOpponent(teamTriCode)
-			teamsHaveAnotherMatchup := scheduledGames.HaveAnotherMatchup(opponent, currentDateWestern)
-			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams, teamsHaveAnotherMatchup)
+			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 			content := boxscore.GetRedditBodyString(nba.GetPlayers(dailyAPIPaths.Players))
 			redditClient.SubmitNewPost(subreddit, title, content)
+			gameEvent.CreatedTime = time.Now()
 			gameEvent.GameID = todaysGame.GameID
+			gameEvent.TeamID = teamID
 			gameEvent.PostGameThread = true
 			datastore.SaveTeamGameEvent(gameEvent)
 		}

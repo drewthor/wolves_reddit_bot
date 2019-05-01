@@ -21,12 +21,12 @@ type Boxscore struct {
 		PlayersStats []PlayerStats `json:"activePlayers"`
 	} `json:"stats,omitempty"`
 	BasicGameDataNode struct {
-		Clock          string            `json:"clock"`
-		GameIsActive   bool              `json:"isGameActivated"`
-		GameEndTimeUTC string            `json:"endTimeUTC,omitempty"`
-		HomeTeamInfo   TeamBoxscoreInfo  `json:"hTeam"`
-		AwayTeamInfo   TeamBoxscoreInfo  `json:"vTeam"`
-		PlayoffsNode   *PlayoffsGameInfo `json:"playoffs"`
+		Clock           string            `json:"clock"`
+		GameIsActivated bool              `json:"isGameActivated"` // if this is true, it might be able to be used to determine if things like record and series record is updated
+		GameEndTimeUTC  string            `json:"endTimeUTC,omitempty"`
+		HomeTeamInfo    TeamBoxscoreInfo  `json:"hTeam"`
+		AwayTeamInfo    TeamBoxscoreInfo  `json:"vTeam"`
+		PlayoffsNode    *PlayoffsGameInfo `json:"playoffs"`
 
 		PeriodNode struct {
 			CurrentPeriod int `json:"current"`
@@ -86,6 +86,11 @@ func incrementString(str string) string {
 func (b *Boxscore) UpdateSeriesRecord() {
 	// the nba does not appear to update the series wins and losses right after the game for either team; update them based on the result of the game
 	// they do eventually update the series wins and losses, but by then we should have already posted the thread
+	// isGameActivated might be the trigger/think to look at for if the series has been updated see https://github.com/f1uk3r/Some-Python-Scripts/blob/master/reddit-nba-bot/reddit-boxscore-bot.py
+	if !b.BasicGameDataNode.GameIsActivated {
+		return
+	}
+
 	homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
 	if homeTeamWon {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
@@ -149,7 +154,7 @@ func (b *Boxscore) GetRedditBodyString(players map[string]Player) string {
 	return body
 }
 
-func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team, haveMoreMatchups bool) string {
+func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
 	title := ""
 	firstTeam := Team{}
 	firstTeamStats := TeamStats{}
@@ -193,7 +198,7 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 	if err != nil {
 		log.Fatal("could not convert team's points string to int")
 	}
-	
+
 	firstTeamWon := firstTeamPointsInt > secondTeamPointsInt
 
 	// Specific game details; blowout, overtime, etc.
@@ -283,7 +288,7 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 		log.Println(fmt.Sprintf("%s: %s", firstTeamInfo.TriCode, firstTeamPlayoffsGameTeamInfo.SeriesWins))
 		log.Println(fmt.Sprintf("%s: %s", secondTeamInfo.TriCode, secondTeamPlayoffsGameTeamInfo.SeriesWins))
 		if firstTeamPlayoffsGameTeamInfo.SeriesWins == secondTeamPlayoffsGameTeamInfo.SeriesWins {
-			if haveMoreMatchups {
+			if !firstTeamPlayoffsGameTeamInfo.WonSeries && !secondTeamPlayoffsGameTeamInfo.WonSeries {
 				if firstTeamWon {
 					title += "TIE SERIES"
 				} else {
@@ -293,14 +298,14 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 				log.Fatal("a playoff series can't end tied")
 			}
 		} else if firstTeamPlayoffsGameTeamInfo.SeriesWins < secondTeamPlayoffsGameTeamInfo.SeriesWins {
-			if haveMoreMatchups {
+			if !secondTeamPlayoffsGameTeamInfo.WonSeries {
 				title += "TRAIL SERIES"
 			} else {
 				title += "LOSE SERIES"
 			}
 		} else {
 			// first team leading series
-			if haveMoreMatchups {
+			if !firstTeamPlayoffsGameTeamInfo.WonSeries {
 				title += "LEAD SERIES"
 			} else {
 				title += "WIN SERIES"

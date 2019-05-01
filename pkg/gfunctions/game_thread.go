@@ -45,9 +45,7 @@ func CreateGameThread(teamTriCode nba.TriCode) {
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
 			subreddit := "SeattleSockeye"
-			opponent := boxscore.GetOpponent(teamTriCode)
-			teamsHaveAnotherMatchup := scheduledGames.HaveAnotherMatchup(opponent, currentDateWestern)
-			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams, teamsHaveAnotherMatchup)
+			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 			content := boxscore.GetRedditBodyString(nba.GetPlayers(dailyAPIPaths.Players))
 			redditClient.SubmitNewPost(subreddit, title, content)
 			gameEvent.GameID = todaysGame.GameID

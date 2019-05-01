@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 )
 
 const (
@@ -30,6 +31,7 @@ func (d *Datastore) initClient() {
 }
 
 type TeamGameEvent struct {
+	CreatedTime    time.Time
 	GameID         string
 	TeamID         string
 	PreGameThread  bool
@@ -49,7 +51,7 @@ func (d *Datastore) GetTeamGameEvent(gameID, teamID string) (TeamGameEvent, bool
 	keyName := MakeKeyName(gameID, teamID)
 	key := datastore.NameKey(projectKey, keyName, nil)
 	if err := d.dsClient.Get(d.ctx, key, &gameEvent); err != nil {
-		log.Println(fmt.Sprintf("failed to get GameEvent with ID: %s", gameID))
+		log.Println(fmt.Sprintf("failed to get TeamGameEvent with ID: %s", keyName))
 		log.Println(err)
 		return gameEvent, false
 	}
@@ -67,4 +69,5 @@ func (d *Datastore) SaveTeamGameEvent(gameEvent TeamGameEvent) {
 		log.Println(err)
 	}
 	log.Println("saved TeamGameEvent")
+	log.Println(keyName)
 }
