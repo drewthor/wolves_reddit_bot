@@ -91,6 +91,13 @@ func (b *Boxscore) UpdateSeriesRecord() {
 		return
 	}
 
+	log.Println("Updating series record")
+	log.Println(fmt.Sprintf("GameIsActivated: %t", b.BasicGameDataNode.GameIsActivated))
+	if b.IsPlayoffGame() {
+		log.Println("Home series wins" + b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
+		log.Println("Away series wins" + b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
+	}
+
 	homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
 	if homeTeamWon {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
@@ -219,9 +226,9 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 		}
 
 		if playoffsRoundInt == 2 {
-			title += fmt.Sprintf("%sERN CONF SEMIS", b.BasicGameDataNode.PlayoffsNode.Conference)
+			title += fmt.Sprintf("%sERN CONF SEMIS", strings.ToUpper(b.BasicGameDataNode.PlayoffsNode.Conference))
 		} else if playoffsRoundInt == 3 {
-			title += fmt.Sprintf("%sERN CONF FINALS", b.BasicGameDataNode.PlayoffsNode.Conference)
+			title += fmt.Sprintf("%sERN CONF FINALS", strings.ToUpper(b.BasicGameDataNode.PlayoffsNode.Conference))
 		} else if playoffsRoundInt == 4 {
 			title += "NBA FINALS"
 		} else {

@@ -47,6 +47,7 @@ func CreatePostGameThread(teamTriCode nba.TriCode) {
 			log.Println("making post")
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
+			log.Println("authorized")
 			subreddit := "SeattleSockeye"
 			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 			content := boxscore.GetRedditBodyString(nba.GetPlayers(dailyAPIPaths.Players))
