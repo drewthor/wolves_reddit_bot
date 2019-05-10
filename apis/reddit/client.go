@@ -3,7 +3,6 @@ package reddit
 import (
 	"context"
 	"encoding/json"
-	"golang.org/x/oauth2"
 	"log"
 	"net/http"
 	"net/url"
@@ -11,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 const authURI = "https://www.reddit.com/api/v1/authorize"

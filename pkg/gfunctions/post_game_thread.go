@@ -13,12 +13,12 @@ func CreatePostGameThread(teamTriCode nba.TriCode) {
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
-	eastCoastLocation, locationError := time.LoadLocation("America/Los_Angeles")
+	westCoastLocation, locationError := time.LoadLocation("America/Los_Angeles")
 	if locationError != nil {
 		log.Fatal(locationError)
 	}
-	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
-	currentDateWestern := currentTimeEastern.Format(nba.TimeDayFormat)
+	currentTimeWestern := currentTimeUTC.In(westCoastLocation)
+	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
 	log.Println(currentDateWestern)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)

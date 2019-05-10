@@ -21,12 +21,18 @@ type Boxscore struct {
 		PlayersStats []PlayerStats `json:"activePlayers"`
 	} `json:"stats,omitempty"`
 	BasicGameDataNode struct {
-		Clock           string            `json:"clock"`
-		GameIsActivated bool              `json:"isGameActivated"` // if this is true, it might be able to be used to determine if things like record and series record is updated
-		GameEndTimeUTC  string            `json:"endTimeUTC,omitempty"`
-		HomeTeamInfo    TeamBoxscoreInfo  `json:"hTeam"`
-		AwayTeamInfo    TeamBoxscoreInfo  `json:"vTeam"`
-		PlayoffsNode    *PlayoffsGameInfo `json:"playoffs"`
+		Arena                ArenaInfo         `json:"arena"`
+		Clock                string            `json:"clock"`
+		GameIsActivated      bool              `json:"isGameActivated"` // see UpdateSeriesRecord
+		GameStartTimeEastern string            `json:"startTimeEastern"`
+		GameStartDateEastern string            `json:"startDateEastern"`
+		GameEndTimeUTC       string            `json:"endTimeUTC,omitempty"`
+		HomeTeamInfo         TeamBoxscoreInfo  `json:"hTeam"`
+		AwayTeamInfo         TeamBoxscoreInfo  `json:"vTeam"`
+		PlayoffsNode         *PlayoffsGameInfo `json:"playoffs"`
+		RefereeNode          struct {
+			Referees []RefereeInfo `json:"formatted"`
+		} `json:"officials"`
 
 		PeriodNode struct {
 			CurrentPeriod int `json:"current"`
@@ -84,6 +90,8 @@ func incrementString(str string) string {
 }
 
 func (b *Boxscore) UpdateSeriesRecord() {
+	log.Println("Updating series record")
+	log.Println(fmt.Sprintf("GameIsActivated: %t", b.BasicGameDataNode.GameIsActivated))
 	// the nba does not appear to update the series wins and losses right after the game for either team; update them based on the result of the game
 	// they do eventually update the series wins and losses, but by then we should have already posted the thread
 	// isGameActivated might be the trigger/think to look at for if the series has been updated see https://github.com/f1uk3r/Some-Python-Scripts/blob/master/reddit-nba-bot/reddit-boxscore-bot.py
@@ -91,8 +99,6 @@ func (b *Boxscore) UpdateSeriesRecord() {
 		return
 	}
 
-	log.Println("Updating series record")
-	log.Println(fmt.Sprintf("GameIsActivated: %t", b.BasicGameDataNode.GameIsActivated))
 	if b.IsPlayoffGame() {
 		log.Println("Home series wins" + b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
 		log.Println("Away series wins" + b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
@@ -122,11 +128,39 @@ func (b *Boxscore) UpdateSeriesRecord() {
 	}
 }
 
+func get_game_info_table_string(arenaName, city, country, startTimeEastern, startDateEastern string) string {
+	gameInfoTableString := "|||\n"
+	gameInfoTableString += "|:-:|:-:|\n"
+	gameInfoTableString += fmt.Sprintf("|**Arena**|%s|\n", arenaName)
+	gameInfoTableString += fmt.Sprintf("|**Location**|%s, %s|\n", city, country)
+
+	gameTime := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
+
+	gameTimeHour := gameTime.Hour()
+	timePM := false
+	if gameTimeHour > 12 {
+		gameTimeHour = gameTimeHour - 12
+		timePM = true
+	}
+	gameTimeHourMinute := fmt.Sprintf("%02d%02d", gameTimeHour, gameTime.Minute())
+	if timePM {
+		gameTimeHourMinute += "PM"
+	} else {
+		gameTimeHourMinute += "AM"
+	}
+	timeStringURL := fmt.Sprintf("https://time.is/compare/%s_%v_%s_%v__in_New_York", gameTimeHourMinute, gameTime.Day(), gameTime.Month().String(), gameTime.Year())
+
+	timeString := fmt.Sprintf("%s [other time zones](%s)", startTimeEastern, timeStringURL)
+
+	gameInfoTableString += fmt.Sprintf("|**Time**|%s|\n", timeString)
+	return gameInfoTableString
+}
+
 func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamStats, players map[string]Player, playersStats []PlayerStats) string {
-	columnHeader := "**[](/%s) %s**|**Min**|**FG**|**FT**|**3PT**|**+/-**|**OR**|**Reb**|**A**|**Blk**|**Stl**|**TO**|**PF**|**Pts**|\n"
+	columnHeader := "|**[](/%s) %s**|**Min**|**FG**|**FT**|**3PT**|**+/-**|**OR**|**Reb**|**A**|**Blk**|**Stl**|**TO**|**PF**|**Pts**|\n"
 	columnHeaderSeparator := "|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
-	playerStatsString := "%s. %s|%s|%s-%s|%s-%s|%s-%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|\n"
-	totalsString := "Totals|%s|%s-%s(%s%%)|%s-%s(%s%%)|%s-%s(%s%%)|-|%s|%s|%s|%s|%s|%s|%s|%s|\n"
+	playerStatsString := "|%s. %s|%s|%s-%s|%s-%s|%s-%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|\n"
+	totalsString := "|Totals|%s|%s-%s(%s%%)|%s-%s(%s%%)|%s-%s(%s%%)|-|%s|%s|%s|%s|%s|%s|%s|%s|\n"
 	teamStatsTableString := ""
 	teamStatsTableString += fmt.Sprintf(columnHeader, teamBoxscoreInfo.TriCode, teamBoxscoreInfo.TriCode)
 	teamStatsTableString += columnHeaderSeparator
@@ -154,6 +188,8 @@ func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats Te
 
 func (b *Boxscore) GetRedditBodyString(players map[string]Player) string {
 	body := ""
+	body += get_game_info_table_string(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	body += "\n"
 	body += get_team_stats_table_string(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
 	body += "\n"
 	body += get_team_stats_table_string(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
@@ -319,7 +355,7 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 			}
 		}
 		title += " "
-		title += "(" + firstTeamInfo.SeriesWins + "-" + firstTeamInfo.SeriesLosses + ")"
+		title += "(" + firstTeamPlayoffsGameTeamInfo.SeriesWins + "-" + secondTeamPlayoffsGameTeamInfo.SeriesWins + ")"
 	}
 
 	return title
@@ -382,6 +418,16 @@ type PlayerStats struct {
 	PlusMinus             string `json:"plusMinus"`
 }
 
+type ArenaInfo struct {
+	Name    string `json:"name"`
+	City    string `json:"city"`
+	Country string `json:"country"`
+}
+
+type RefereeInfo struct {
+	FullName string `json:"firstNameLastName"`
+}
+
 func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + boxscoreAPIPath)
 	url := fmt.Sprintf(templateURI, todaysDate, gameID)
@@ -398,6 +444,7 @@ func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
 		log.Fatal(decodeErr)
 	}
 	if boxscoreResult.GameEnded() {
+		log.Println("updating series record")
 		boxscoreResult.UpdateSeriesRecord()
 	}
 	return boxscoreResult

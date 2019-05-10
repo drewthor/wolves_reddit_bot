@@ -1,7 +1,10 @@
 package nba
 
 import (
+	"fmt"
+	"log"
 	"regexp"
+	"time"
 )
 
 const nbaAPIBaseURI = "http://data.nba.net"
@@ -17,6 +20,31 @@ func makeURIFormattable(uri string) string {
 	format := "%s"
 	formattedString := regex.ReplaceAllString(uri, format)
 	return formattedString
+}
+
+func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) time.Time {
+	eastCoastLocation, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		log.Println(err)
+	}
+
+	// add space between time zone and year to help parser
+	APIFormat := "3:04 PM 20060102"
+
+	// strip out time zone from start time as the time zone is eastern US
+	// and doesn't match golang's time package time zones (e.g. ET vs golang expects EST)
+	re := regexp.MustCompile(`([^ET])*`)
+	matches := re.FindStringSubmatch(startTimeEastern)
+
+	// grab the first match since the NBA time string puts the time zone last
+	combinedAPIData := matches[0] + startDateEastern
+	time, err := time.ParseInLocation(APIFormat, combinedAPIData, eastCoastLocation)
+	if err != nil {
+		log.Println(fmt.Sprintf("combined API game time: %s", combinedAPIData))
+		log.Println(err)
+	}
+
+	return time
 }
 
 type TriCode string
