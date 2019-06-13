@@ -2,9 +2,9 @@ package main
 
 import (
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
-	"github.com/drewthor/wolves_reddit_bot/pkg/gfunctions"
+	"github.com/drewthor/wolves_reddit_bot/pkg/gfunctions/gt"
 )
 
 func main() {
-	gfunctions.CreatePostGameThread(nba.MinnesotaTimberwolves)
+	gt.CreateGameThread(nba.MinnesotaTimberwolves)
 }

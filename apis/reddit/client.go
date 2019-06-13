@@ -1,6 +1,7 @@
 package reddit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log"
@@ -8,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -73,7 +73,7 @@ func (c *Client) loadConfiguration(file string) {
 	c.config = &oauth2.Config{
 		ClientID:     c.userConfig.ClientID,
 		ClientSecret: c.userConfig.ClientSecret,
-		Scopes:       []string{"submit"},
+		Scopes:       []string{"submit", "edit"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  authURI,
 			TokenURL: authTokenURI,
@@ -91,7 +91,7 @@ func (c *Client) Authorize() {
 		"password":   {c.userConfig.Password},
 	}
 
-	req, err := http.NewRequest("POST", authTokenURI, strings.NewReader(form.Encode()))
+	req, err := http.NewRequest("POST", authTokenURI, bytes.NewBufferString(form.Encode()))
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -134,20 +134,22 @@ func (c *Client) Authorize() {
 	}
 }
 
-func (c *Client) SubmitNewPost(subreddit, title, content string) {
+func (c *Client) SubmitNewPost(subreddit, title, content string) SubmitResponse {
 	if c.httpClient == nil || c.token == nil {
 		c.Authorize()
 	}
-	s := new(submit)
-	s.ad = false
-	s.apiType = "json"
-	s.content = content
-	s.kind = "self"
-	s.nsfw = false
-	s.sendReplies = false
-	s.spoiler = false
-	s.subreddit = subreddit
-	s.title = title
+
+	s := &submit{
+		ad:          false,
+		apiType:     "json",
+		content:     content,
+		kind:        "self",
+		nsfw:        false,
+		sendReplies: false,
+		spoiler:     false,
+		subreddit:   subreddit,
+		title:       title,
+	}
 
 	urlValues := url.Values{
 		"ad":          {strconv.FormatBool(s.ad)},
@@ -161,7 +163,7 @@ func (c *Client) SubmitNewPost(subreddit, title, content string) {
 		"title":       {s.title},
 	}
 
-	request, err := http.NewRequest("POST", submitURI, strings.NewReader(urlValues.Encode()))
+	request, err := http.NewRequest("POST", submitURI, bytes.NewBufferString(urlValues.Encode()))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -174,5 +176,46 @@ func (c *Client) SubmitNewPost(subreddit, title, content string) {
 	}
 	if response.StatusCode != 200 {
 		log.Fatal("Failed to submit post with status code: " + strconv.Itoa(response.StatusCode))
+	}
+	defer response.Body.Close()
+
+	submitResponse := SubmitResponse{}
+	decodeErr := json.NewDecoder(response.Body).Decode(&submitResponse)
+	if decodeErr != nil {
+		log.Fatal(decodeErr)
+	}
+	return submitResponse
+}
+
+func (c *Client) UpdateUserText(thingFullname, content string) {
+	if c.httpClient == nil || c.token == nil {
+		c.Authorize()
+	}
+
+	u := &updateUserText{
+		apiType:       "json",
+		content:       content,
+		thingFullname: thingFullname,
+	}
+
+	urlValues := url.Values{
+		"api_type": {u.apiType},
+		"text":     {u.content},
+		"thing_id": {u.thingFullname},
+	}
+
+	request, err := http.NewRequest("POST", updateUserTextURI, bytes.NewBufferString(urlValues.Encode()))
+	if err != nil {
+		log.Fatal(err)
+	}
+	request.PostForm = urlValues
+	request.Header.Set("User-Agent", userAgent)
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if response.StatusCode != 200 {
+		log.Fatal("Failed to update user text with status code: " + strconv.Itoa(response.StatusCode))
 	}
 }

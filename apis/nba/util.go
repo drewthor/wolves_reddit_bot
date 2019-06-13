@@ -47,6 +47,24 @@ func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) time.Time 
 	return time
 }
 
+// returns a player's string of the form "D. Howard"
+func getPlayerString(playerID string, players map[string]Player) string {
+	playerString := "%s. %s"
+	player := players[playerID]
+	firstInitial := ""
+	lastName := ""
+	if player.FirstName == "" {
+		log.Println(player)
+		log.Println(playerID)
+		firstInitial = ""
+		lastName = ""
+	} else {
+		firstInitial = player.FirstName[:1]
+		lastName = player.LastName
+	}
+	return fmt.Sprintf(playerString, firstInitial, lastName)
+}
+
 type TriCode string
 
 const (

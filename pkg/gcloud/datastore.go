@@ -1,11 +1,12 @@
 package gcloud
 
 import (
-	"cloud.google.com/go/datastore"
 	"context"
 	"fmt"
 	"log"
 	"time"
+
+	"cloud.google.com/go/datastore"
 )
 
 const (
@@ -31,12 +32,13 @@ func (d *Datastore) initClient() {
 }
 
 type TeamGameEvent struct {
-	CreatedTime    time.Time
-	GameID         string
-	TeamID         string
-	PreGameThread  bool
-	GameThread     bool
-	PostGameThread bool
+	CreatedTime                  time.Time
+	GameID                       string
+	TeamID                       string
+	PreGameThread                bool
+	GameThread                   bool
+	GameThreadRedditPostFullname string
+	PostGameThread               bool
 }
 
 func MakeKeyName(gameID, teamID string) string {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Boxscore struct {
@@ -22,6 +23,7 @@ type Boxscore struct {
 	} `json:"stats,omitempty"`
 	BasicGameDataNode struct {
 		Arena                ArenaInfo         `json:"arena"`
+		Attendance           string            `json:"attendance"`
 		Clock                string            `json:"clock"`
 		GameIsActivated      bool              `json:"isGameActivated"` // see UpdateSeriesRecord
 		GameStartTimeEastern string            `json:"startTimeEastern"`
@@ -29,7 +31,7 @@ type Boxscore struct {
 		GameEndTimeUTC       string            `json:"endTimeUTC,omitempty"`
 		HomeTeamInfo         TeamBoxscoreInfo  `json:"hTeam"`
 		AwayTeamInfo         TeamBoxscoreInfo  `json:"vTeam"`
-		PlayoffsNode         *PlayoffsGameInfo `json:"playoffs"`
+		PlayoffsNode         *PlayoffsGameInfo `json:"playoffs,omitempty"`
 		RefereeNode          struct {
 			Referees []RefereeInfo `json:"formatted"`
 		} `json:"officials"`
@@ -68,6 +70,39 @@ func (b *Boxscore) GameEnded() bool {
 	return false
 }
 
+func (b *Boxscore) DurationUntilGameStarts() time.Duration {
+	currentTimeUTC := time.Now().UTC()
+	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
+	// when the eastern time rolls over into the next day
+	eastCoastLocation, locationError := time.LoadLocation("America/New_York")
+	if locationError != nil {
+		log.Fatal(locationError)
+	}
+	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
+
+	gameTime := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+
+	return gameTime.Sub(currentTimeEastern)
+}
+
+func (b *Boxscore) GameStarted() bool {
+	currentTimeUTC := time.Now().UTC()
+	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
+	// when the eastern time rolls over into the next day
+	eastCoastLocation, locationError := time.LoadLocation("America/New_York")
+	if locationError != nil {
+		log.Fatal(locationError)
+	}
+	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
+
+	gameTime := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+
+	if currentTimeEastern.After(gameTime) {
+		return true
+	}
+	return false
+}
+
 func (b *Boxscore) GetOpponent(team TriCode) TriCode {
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == team {
 		return b.BasicGameDataNode.AwayTeamInfo.TriCode
@@ -90,48 +125,135 @@ func incrementString(str string) string {
 }
 
 func (b *Boxscore) UpdateSeriesRecord() {
-	log.Println("Updating series record")
+	if b.IsPlayoffGame() {
+		homeWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
+		if err != nil {
+			log.Println("could not convert home playoff series wins to int")
+		}
+		awayWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
+		if err != nil {
+			log.Println("could not convert away playoff series wins to int")
+		}
+		gameInSeries, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.GameInSeries)
+		if err != nil {
+			log.Println("could not convert away playoff series wins to int")
+		}
+		log.Println(fmt.Sprintf("gameInSeries", gameInSeries))
+		if (homeWins + awayWins) != gameInSeries {
+			log.Println("updating playoff series records")
+			homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
+			if homeTeamWon {
+				b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
+			} else {
+				b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
+			}
+		}
+	}
+
 	log.Println(fmt.Sprintf("GameIsActivated: %t", b.BasicGameDataNode.GameIsActivated))
-	// the nba does not appear to update the series wins and losses right after the game for either team; update them based on the result of the game
+	// the nba does not appear to update the series wins and losses right after the game for either team for regular reason series records; update them based on the result of the game
 	// they do eventually update the series wins and losses, but by then we should have already posted the thread
 	// isGameActivated might be the trigger/think to look at for if the series has been updated see https://github.com/f1uk3r/Some-Python-Scripts/blob/master/reddit-nba-bot/reddit-boxscore-bot.py
+	// update: this does not appear to be reliable either
 	if !b.BasicGameDataNode.GameIsActivated {
 		return
 	}
 
-	if b.IsPlayoffGame() {
-		log.Println("Home series wins" + b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
-		log.Println("Away series wins" + b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
-	}
+	log.Println("Updating series record")
 
 	homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
 	if homeTeamWon {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
 		b.BasicGameDataNode.AwayTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesLosses)
-
-		if b.IsPlayoffGame() {
-			b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
-			if b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins == "4" {
-				b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.WonSeries = true
-			}
-		}
 	} else {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesLosses)
 		b.BasicGameDataNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesWins)
-
-		if b.IsPlayoffGame() {
-			b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
-			if b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins == "4" {
-				b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.WonSeries = true
-			}
-		}
 	}
 }
 
-func get_game_info_table_string(arenaName, city, country, startTimeEastern, startDateEastern string) string {
-	gameInfoTableString := "|||\n"
+func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID string) (TeamLeaders, TeamLeaders) {
+	var homeTeamLeaders, awayTeamLeaders TeamLeaders
+	for _, playerStats := range playersStats {
+		var teamLeaders *TeamLeaders
+		if playerStats.TeamID == homeTeamID {
+			teamLeaders = &homeTeamLeaders
+		} else if playerStats.TeamID == awayTeamID {
+			teamLeaders = &awayTeamLeaders
+		}
+
+		playerPoints, err := strconv.Atoi(playerStats.Points)
+		if err != nil {
+			log.Println("failed to convert points to string")
+		}
+
+		if playerPoints == teamLeaders.Points {
+			teamLeaders.PointsLeaders = append(teamLeaders.PointsLeaders, playerStats.ID)
+		} else if playerPoints > teamLeaders.Points {
+			teamLeaders.PointsLeaders = nil
+			teamLeaders.Points = playerPoints
+			teamLeaders.PointsLeaders = append(teamLeaders.PointsLeaders, playerStats.ID)
+		}
+
+		playerRebounds, err := strconv.Atoi(playerStats.TotalRebounds)
+		if err != nil {
+			log.Println("failed to convert rebounds to string")
+		}
+
+		if playerRebounds == teamLeaders.Rebounds {
+			teamLeaders.ReboundsLeaders = append(teamLeaders.ReboundsLeaders, playerStats.ID)
+		} else if playerRebounds > teamLeaders.Rebounds {
+			teamLeaders.ReboundsLeaders = nil
+			teamLeaders.Rebounds = playerRebounds
+			teamLeaders.ReboundsLeaders = append(teamLeaders.ReboundsLeaders, playerStats.ID)
+		}
+
+		playerAssists, err := strconv.Atoi(playerStats.Assists)
+		if err != nil {
+			log.Println("failed to convert assists to string")
+		}
+
+		if playerAssists == teamLeaders.Assists {
+			teamLeaders.AssistsLeaders = append(teamLeaders.AssistsLeaders, playerStats.ID)
+		} else if playerAssists > teamLeaders.Assists {
+			teamLeaders.AssistsLeaders = nil
+			teamLeaders.Assists = playerAssists
+			teamLeaders.AssistsLeaders = append(teamLeaders.AssistsLeaders, playerStats.ID)
+		}
+
+		playerBlocks, err := strconv.Atoi(playerStats.Blocks)
+		if err != nil {
+			log.Println("failed to convert blocks to string")
+		}
+
+		if playerBlocks == teamLeaders.Blocks {
+			teamLeaders.BlocksLeaders = append(teamLeaders.BlocksLeaders, playerStats.ID)
+		} else if playerBlocks > teamLeaders.Blocks {
+			teamLeaders.BlocksLeaders = nil
+			teamLeaders.Blocks = playerBlocks
+			teamLeaders.BlocksLeaders = append(teamLeaders.BlocksLeaders, playerStats.ID)
+		}
+
+		playerSteals, err := strconv.Atoi(playerStats.Steals)
+		if err != nil {
+			log.Println("failed to convert steals to string")
+		}
+
+		if playerSteals == teamLeaders.Steals {
+			teamLeaders.StealsLeaders = append(teamLeaders.StealsLeaders, playerStats.ID)
+		} else if playerSteals > teamLeaders.Steals {
+			teamLeaders.StealsLeaders = nil
+			teamLeaders.Steals = playerSteals
+			teamLeaders.StealsLeaders = append(teamLeaders.StealsLeaders, playerStats.ID)
+		}
+	}
+	return homeTeamLeaders, awayTeamLeaders
+}
+
+func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDateEastern, attendance string) string {
+	gameInfoTableString := "|**Game Info**||\n"
 	gameInfoTableString += "|:-:|:-:|\n"
 	gameInfoTableString += fmt.Sprintf("|**Arena**|%s|\n", arenaName)
+	gameInfoTableString += fmt.Sprintf("|**Attendance**|%s|\n", attendance)
 	gameInfoTableString += fmt.Sprintf("|**Location**|%s, %s|\n", city, country)
 
 	gameTime := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
@@ -156,43 +278,101 @@ func get_game_info_table_string(arenaName, city, country, startTimeEastern, star
 	return gameInfoTableString
 }
 
-func get_team_stats_table_string(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamStats, players map[string]Player, playersStats []PlayerStats) string {
-	columnHeader := "|**[](/%s) %s**|**Min**|**FG**|**FT**|**3PT**|**+/-**|**OR**|**Reb**|**A**|**Blk**|**Stl**|**TO**|**PF**|**Pts**|\n"
+func getTeamQuarterScoreTableString(homeTeamBoxscoreInfo TeamBoxscoreInfo, homeTeamStats TeamStats, awayTeamBoxscoreInfo TeamBoxscoreInfo, awayTeamStats TeamStats) string {
+	quarterScoreTableString := ""
+	quarterScoreTableString += "||**Q1**|**Q2**|**Q3**|**Q4**|**Total**|\n"
+	quarterScoreTableString += "|:-:|:-:|:-:|:-:|:-:|:-:|\n"
+	quarterScoreTableString += fmt.Sprintf("|%s|%s|%s|%s|%s|%s|\n", homeTeamBoxscoreInfo.TriCode, homeTeamBoxscoreInfo.PointsByQuarter[0].Points, homeTeamBoxscoreInfo.PointsByQuarter[1].Points, homeTeamBoxscoreInfo.PointsByQuarter[2].Points, homeTeamBoxscoreInfo.PointsByQuarter[3].Points, homeTeamStats.Points)
+	quarterScoreTableString += fmt.Sprintf("|%s|%s|%s|%s|%s|%s|\n", awayTeamBoxscoreInfo.TriCode, awayTeamBoxscoreInfo.PointsByQuarter[0].Points, awayTeamBoxscoreInfo.PointsByQuarter[1].Points, awayTeamBoxscoreInfo.PointsByQuarter[2].Points, awayTeamBoxscoreInfo.PointsByQuarter[3].Points, awayTeamStats.Points)
+	return quarterScoreTableString
+}
+
+func getTeamStatsCategoryLeadersString(stat int, leaders []string, players map[string]Player) string {
+	statLeadersString := ""
+	if stat == 0 {
+		return statLeadersString
+	}
+
+	numStatLeaders := len(leaders)
+	for index, player := range leaders {
+		statLeadersString += getPlayerString(player, players)
+		if index != numStatLeaders-1 {
+			statLeadersString += ", "
+		}
+	}
+	return statLeadersString
+}
+
+func getTeamLeadersTableString(homeTeamBoxscoreInfo TeamBoxscoreInfo, homeTeamLeaders TeamLeaders, awayTeamBoxscoreInfo TeamBoxscoreInfo, awayTeamLeaders TeamLeaders, players map[string]Player) string {
+	teamLeadersTableString := ""
+	teamLeadersTableString += "|**Team Leaders**|**PTS**|**REB**|**AST**|**STL**|**BLK**|\n"
+	teamLeadersTableString += "|:-:|:-:|:-:|:-:|:-:|:-:|\n"
+
+	teamLeadersString := "|%s|%s (%d)|%s (%d)|%s (%d)|%s (%d)|%s (%d)|\n"
+
+	homeTeamPointsLeadersString := getTeamStatsCategoryLeadersString(homeTeamLeaders.Points, homeTeamLeaders.PointsLeaders, players)
+	homeTeamReboundsLeadersString := getTeamStatsCategoryLeadersString(homeTeamLeaders.Rebounds, homeTeamLeaders.ReboundsLeaders, players)
+	homeTeamAssistsLeadersString := getTeamStatsCategoryLeadersString(homeTeamLeaders.Assists, homeTeamLeaders.AssistsLeaders, players)
+	homeTeamStealsLeadersString := getTeamStatsCategoryLeadersString(homeTeamLeaders.Steals, homeTeamLeaders.StealsLeaders, players)
+	homeTeamBlocksLeadersString := getTeamStatsCategoryLeadersString(homeTeamLeaders.Blocks, homeTeamLeaders.BlocksLeaders, players)
+
+	awayTeamPointsLeadersString := getTeamStatsCategoryLeadersString(awayTeamLeaders.Points, awayTeamLeaders.PointsLeaders, players)
+	awayTeamReboundsLeadersString := getTeamStatsCategoryLeadersString(awayTeamLeaders.Rebounds, awayTeamLeaders.ReboundsLeaders, players)
+	awayTeamAssistsLeadersString := getTeamStatsCategoryLeadersString(awayTeamLeaders.Assists, awayTeamLeaders.AssistsLeaders, players)
+	awayTeamStealsLeadersString := getTeamStatsCategoryLeadersString(awayTeamLeaders.Steals, awayTeamLeaders.StealsLeaders, players)
+	awayTeamBlocksLeadersString := getTeamStatsCategoryLeadersString(awayTeamLeaders.Blocks, awayTeamLeaders.BlocksLeaders, players)
+
+	teamLeadersTableString += fmt.Sprintf(teamLeadersString, homeTeamBoxscoreInfo.TriCode, homeTeamPointsLeadersString, homeTeamLeaders.Points, homeTeamReboundsLeadersString, homeTeamLeaders.Rebounds, homeTeamAssistsLeadersString, homeTeamLeaders.Assists, homeTeamStealsLeadersString, homeTeamLeaders.Steals, homeTeamBlocksLeadersString, homeTeamLeaders.Blocks)
+	teamLeadersTableString += fmt.Sprintf(teamLeadersString, awayTeamBoxscoreInfo.TriCode, awayTeamPointsLeadersString, awayTeamLeaders.Points, awayTeamReboundsLeadersString, awayTeamLeaders.Rebounds, awayTeamAssistsLeadersString, awayTeamLeaders.Assists, awayTeamStealsLeadersString, awayTeamLeaders.Steals, awayTeamBlocksLeadersString, awayTeamLeaders.Blocks)
+
+	return teamLeadersTableString
+}
+
+func getTeamStatsTableString(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamStats, players map[string]Player, playersStats []PlayerStats) string {
+	columnHeader := "|**[](/%s) %s**|**MIN**|**PTS**|**FG**|**3PT**|**FT**|**OREB**|**REB**|**AST**|**TOV**|**STL**|**BLK**|**PF**|**+/-**|\n"
 	columnHeaderSeparator := "|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
-	playerStatsString := "|%s. %s|%s|%s-%s|%s-%s|%s-%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|\n"
-	totalsString := "|Totals|%s|%s-%s(%s%%)|%s-%s(%s%%)|%s-%s(%s%%)|-|%s|%s|%s|%s|%s|%s|%s|%s|\n"
+	playerStatsString := "|%s|%s|%s|%s-%s|%s-%s|%s-%s|%s|%s|%s|%s|%s|%s|%s|%s|\n"
+	totalsString := "|Totals|%s|%s|%s-%s (%s%%)|%s-%s (%s%%)|%s-%s (%s%%)|%s|%s|%s|%s|%s|%s|%s|-|\n"
 	teamStatsTableString := ""
 	teamStatsTableString += fmt.Sprintf(columnHeader, teamBoxscoreInfo.TriCode, teamBoxscoreInfo.TriCode)
 	teamStatsTableString += columnHeaderSeparator
 	for _, playerStats := range playersStats {
 		if playerStats.TeamID == teamBoxscoreInfo.TeamID {
-			player := players[playerStats.ID]
-			firstInitial := ""
-			lastName := ""
-			if player.FirstName == "" {
-				log.Println(player)
-				log.Println(playerStats.ID)
-				log.Println(playerStats)
-				firstInitial = ""
-				lastName = ""
-			} else {
-				firstInitial = player.FirstName[:1]
-				lastName = player.LastName
-			}
-			teamStatsTableString += fmt.Sprintf(playerStatsString, firstInitial, lastName, playerStats.Minutes, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.PlusMinus, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Blocks, playerStats.Steals, playerStats.Turnovers, playerStats.PersonalFouls, playerStats.Points)
+			playerString := getPlayerString(playerStats.ID, players)
+
+			teamStatsTableString += fmt.Sprintf(playerStatsString, playerString, playerStats.Minutes, playerStats.Points, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Turnovers, playerStats.Steals, playerStats.Blocks, playerStats.PersonalFouls, playerStats.PlusMinus)
 		}
 	}
-	teamStatsTableString += fmt.Sprintf(totalsString, teamStats.Minutes, teamStats.FieldGoalsMade, teamStats.FieldGoalsAttempted, teamStats.FieldGoalPercentage, teamStats.FreeThrowsMade, teamStats.FreeThrowsAttempted, teamStats.FreeThrowPercentage, teamStats.ThreePointsMade, teamStats.ThreePointsAttempted, teamStats.ThreePointPercentage, teamStats.OffensiveRebounds, teamStats.TotalRebounds, teamStats.Assists, teamStats.Blocks, teamStats.Steals, teamStats.Turnovers, teamStats.PersonalFouls, teamStats.Points)
+	teamStatsTableString += fmt.Sprintf(totalsString, teamStats.Minutes, teamStats.Points, teamStats.FieldGoalsMade, teamStats.FieldGoalsAttempted, teamStats.FieldGoalPercentage, teamStats.ThreePointsMade, teamStats.ThreePointsAttempted, teamStats.ThreePointPercentage, teamStats.FreeThrowsMade, teamStats.FreeThrowsAttempted, teamStats.FreeThrowPercentage, teamStats.OffensiveRebounds, teamStats.TotalRebounds, teamStats.Assists, teamStats.Turnovers, teamStats.Steals, teamStats.Blocks, teamStats.PersonalFouls)
 	return teamStatsTableString
 }
 
-func (b *Boxscore) GetRedditBodyString(players map[string]Player) string {
+func getRefereeTableString(refereesInfo []RefereeInfo) string {
+	refereeTableString := ""
+	refereeTableString += "|**Referees**|\n"
+	refereeTableString += "|:-:|\n"
+	for _, referee := range refereesInfo {
+		refereeTableString += fmt.Sprintf("|%s|\n", referee.FullName)
+	}
+	return refereeTableString
+}
+
+func (b *Boxscore) GetRedditPostGameThreadBodyString(players map[string]Player) string {
 	body := ""
-	body += get_game_info_table_string(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance)
 	body += "\n"
-	body += get_team_stats_table_string(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
 	body += "\n"
-	body += get_team_stats_table_string(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+
+	homeTeamLeaders, awayTeamLeaders := getTeamLeaders(b.StatsNode.PlayersStats, b.BasicGameDataNode.HomeTeamInfo.TeamID, b.BasicGameDataNode.AwayTeamInfo.TeamID)
+	body += getTeamLeadersTableString(b.BasicGameDataNode.HomeTeamInfo, homeTeamLeaders, b.BasicGameDataNode.AwayTeamInfo, awayTeamLeaders, players)
+	body += "\n"
+
+	body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += "\n"
+	body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += "\n"
+	body += getRefereeTableString(b.BasicGameDataNode.RefereeNode.Referees)
 	body += "\n"
 	return body
 }
@@ -330,7 +510,18 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 		// Playoff series info
 		log.Println(fmt.Sprintf("%s: %s", firstTeamInfo.TriCode, firstTeamPlayoffsGameTeamInfo.SeriesWins))
 		log.Println(fmt.Sprintf("%s: %s", secondTeamInfo.TriCode, secondTeamPlayoffsGameTeamInfo.SeriesWins))
-		if firstTeamPlayoffsGameTeamInfo.SeriesWins == secondTeamPlayoffsGameTeamInfo.SeriesWins {
+
+		firstTeamWins, err := strconv.Atoi(firstTeamPlayoffsGameTeamInfo.SeriesWins)
+		if err != nil {
+			log.Println("failed to convert first team's series wins to int")
+		}
+
+		secondTeamWins, err := strconv.Atoi(secondTeamPlayoffsGameTeamInfo.SeriesWins)
+		if err != nil {
+			log.Println("failed to convert second team's series wins to int")
+		}
+
+		if firstTeamWins == secondTeamWins {
 			if !firstTeamPlayoffsGameTeamInfo.WonSeries && !secondTeamPlayoffsGameTeamInfo.WonSeries {
 				if firstTeamWon {
 					title += "TIE SERIES"
@@ -361,36 +552,213 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 	return title
 }
 
+func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player) string {
+	body := ""
+	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance)
+	body += "\n"
+	body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
+	body += "\n"
+
+	homeTeamLeaders, awayTeamLeaders := getTeamLeaders(b.StatsNode.PlayersStats, b.BasicGameDataNode.HomeTeamInfo.TeamID, b.BasicGameDataNode.AwayTeamInfo.TeamID)
+	body += getTeamLeadersTableString(b.BasicGameDataNode.HomeTeamInfo, homeTeamLeaders, b.BasicGameDataNode.AwayTeamInfo, awayTeamLeaders, players)
+	body += "\n"
+
+	body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += "\n"
+	body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += "\n"
+	body += getRefereeTableString(b.BasicGameDataNode.RefereeNode.Referees)
+	body += "\n"
+	return body
+}
+
+func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
+	title := ""
+	firstTeam := Team{}
+	firstTeamStats := TeamStats{}
+	firstTeamInfo := TeamBoxscoreInfo{}
+	firstTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
+	secondTeam := Team{}
+	secondTeamStats := TeamStats{}
+	secondTeamInfo := TeamBoxscoreInfo{}
+	secondTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
+	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
+		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		firstTeamStats = b.StatsNode.HomeTeamNode.TeamStats
+		firstTeamInfo = b.BasicGameDataNode.HomeTeamInfo
+		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		secondTeamStats = b.StatsNode.AwayTeamNode.TeamStats
+		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
+
+		if b.IsPlayoffGame() {
+			firstTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo
+			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
+		}
+	} else {
+		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		firstTeamStats = b.StatsNode.AwayTeamNode.TeamStats
+		firstTeamInfo = b.BasicGameDataNode.AwayTeamInfo
+		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		secondTeamStats = b.StatsNode.HomeTeamNode.TeamStats
+		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
+
+		if b.IsPlayoffGame() {
+			firstTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
+			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo
+		}
+	}
+
+	teamRecordString := "(%s-%s)"
+
+	title += "[GAME THREAD]"
+	title += " "
+
+	if b.IsPlayoffGame() {
+		playoffsRoundInt, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.Round)
+		if err != nil {
+			log.Fatal(fmt.Sprintf("could not convert playoff round %s to int", b.BasicGameDataNode.PlayoffsNode.Round))
+		}
+
+		if playoffsRoundInt == 2 {
+			title += fmt.Sprintf("%sERN CONF SEMIS", strings.ToUpper(b.BasicGameDataNode.PlayoffsNode.Conference))
+		} else if playoffsRoundInt == 3 {
+			title += fmt.Sprintf("%sERN CONF FINALS", strings.ToUpper(b.BasicGameDataNode.PlayoffsNode.Conference))
+		} else if playoffsRoundInt == 4 {
+			title += "NBA FINALS"
+		} else {
+			title += fmt.Sprintf("Playoffs Round %d", playoffsRoundInt)
+		}
+		title += ":"
+		title += " "
+		title += fmt.Sprintf("(%s)", firstTeamPlayoffsGameTeamInfo.Seed)
+		title += " "
+	}
+
+	title += strings.ToUpper(firstTeam.Nickname)
+	title += " "
+
+	if !b.IsPlayoffGame() {
+		title += fmt.Sprintf(teamRecordString, firstTeamInfo.Wins, firstTeamInfo.Losses)
+		title += " "
+	}
+
+	title += "TAKE ON THE"
+	title += " "
+
+	if b.IsPlayoffGame() {
+		title += fmt.Sprintf("(%s)", secondTeamPlayoffsGameTeamInfo.Seed)
+		title += " "
+	}
+
+	title += strings.ToUpper(secondTeam.Nickname)
+	title += " "
+
+	if !b.IsPlayoffGame() {
+		title += fmt.Sprintf(teamRecordString, secondTeamInfo.Wins, secondTeamInfo.Losses)
+		title += " "
+	}
+
+	title += firstTeamStats.Points + "-" + secondTeamStats.Points
+	title += ","
+	title += " "
+
+	if b.IsPlayoffGame() {
+		// Playoff series info
+		log.Println(fmt.Sprintf("%s: %s", firstTeamInfo.TriCode, firstTeamPlayoffsGameTeamInfo.SeriesWins))
+		log.Println(fmt.Sprintf("%s: %s", secondTeamInfo.TriCode, secondTeamPlayoffsGameTeamInfo.SeriesWins))
+
+		firstTeamWins, err := strconv.Atoi(firstTeamPlayoffsGameTeamInfo.SeriesWins)
+		if err != nil {
+			log.Println("failed to convert first team's series wins to int")
+		}
+
+		secondTeamWins, err := strconv.Atoi(secondTeamPlayoffsGameTeamInfo.SeriesWins)
+		if err != nil {
+			log.Println("failed to convert second team's series wins to int")
+		}
+
+		if firstTeamWins == secondTeamWins {
+			title += "SERIES TIED"
+		} else if firstTeamWins < secondTeamWins {
+			title += "TRAIL SERIES"
+		} else {
+			// first team leading series
+			title += "LEAD SERIES"
+		}
+		title += " "
+		title += "(" + firstTeamPlayoffsGameTeamInfo.SeriesWins + "-" + secondTeamPlayoffsGameTeamInfo.SeriesWins + ")"
+	}
+
+	return title
+}
+
 type TeamBoxscoreInfo struct {
-	TeamID       string  `json:"teamId"`
-	TriCode      TriCode `json:"triCode"`
-	Wins         string  `json:"win"`
-	Losses       string  `json:"loss"`
-	SeriesWins   string  `json:"seriesWin"`
-	SeriesLosses string  `json:"seriesLoss"`
+	TeamID          string  `json:"teamId"`
+	TriCode         TriCode `json:"triCode"`
+	Wins            string  `json:"win"`
+	Losses          string  `json:"loss"`
+	SeriesWins      string  `json:"seriesWin"`
+	SeriesLosses    string  `json:"seriesLoss"`
+	PointsByQuarter []struct {
+		Points string `json:"score"`
+	} `json:"linescore"`
 }
 
 type TeamStats struct {
-	Points               string `json:"points"`
-	Minutes              string `json:"min"`
-	FieldGoalsMade       string `json:"fgm"`
-	FieldGoalsAttempted  string `json:"fga"`
-	FieldGoalPercentage  string `json:"fgp"`
-	FreeThrowsMade       string `json:"ftm"`
-	FreeThrowsAttempted  string `json:"fta"`
-	FreeThrowPercentage  string `json:"ftp"`
-	ThreePointsMade      string `json:"tpm"`
-	ThreePointsAttempted string `json:"tpa"`
-	ThreePointPercentage string `json:"tpp"`
-	OffensiveRebounds    string `json:"offReb"`
-	DefensiveRebounds    string `json:"defReb"`
-	TotalRebounds        string `json:"totReb"`
-	Assists              string `json:"assists"`
-	PersonalFouls        string `json:"pfouls"`
-	Steals               string `json:"steals"`
-	Turnovers            string `json:"turnovers"`
-	Blocks               string `json:"blocks"`
-	PlusMinus            string `json:"plusMinus"`
+	Points               string      `json:"points"`
+	Minutes              string      `json:"min"`
+	FieldGoalsMade       string      `json:"fgm"`
+	FieldGoalsAttempted  string      `json:"fga"`
+	FieldGoalPercentage  string      `json:"fgp"`
+	FreeThrowsMade       string      `json:"ftm"`
+	FreeThrowsAttempted  string      `json:"fta"`
+	FreeThrowPercentage  string      `json:"ftp"`
+	ThreePointsMade      string      `json:"tpm"`
+	ThreePointsAttempted string      `json:"tpa"`
+	ThreePointPercentage string      `json:"tpp"`
+	OffensiveRebounds    string      `json:"offReb"`
+	DefensiveRebounds    string      `json:"defReb"`
+	TotalRebounds        string      `json:"totReb"`
+	Assists              string      `json:"assists"`
+	PersonalFouls        string      `json:"pfouls"`
+	Steals               string      `json:"steals"`
+	Turnovers            string      `json:"turnovers"`
+	Blocks               string      `json:"blocks"`
+	PlusMinus            string      `json:"plusMinus"`
+	TeamLeaders          TeamLeaders `json:"leaders"`
+}
+
+type TeamLeaders struct {
+	PointsNode struct {
+		Points      string `json:"value"`
+		PlayersNode []struct {
+			PlayerID string `json:"personId"`
+		} `json:"players"`
+	} `json:"points"`
+	ReboundsNode struct {
+		Rebounds    string `json:"value"`
+		PlayersNode []struct {
+			PlayerID string `json:"personId"`
+		} `json:"players"`
+	} `json:"points"`
+	AssistsNode struct {
+		Assists     string `json:"value"`
+		AssistsNode []struct {
+			PlayerID string `json:"personId"`
+		} `json:"players"`
+	} `json:"points"`
+
+	teamID          int
+	PointsLeaders   []string
+	Points          int
+	ReboundsLeaders []string
+	Rebounds        int
+	AssistsLeaders  []string
+	Assists         int
+	BlocksLeaders   []string
+	Blocks          int
+	StealsLeaders   []string
+	Steals          int
 }
 
 type PlayerStats struct {

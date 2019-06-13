@@ -1,7 +1,5 @@
 package reddit
 
-import ()
-
 const submitURI = "https://oauth.reddit.com/api/submit"
 
 type submit struct {
@@ -14,4 +12,12 @@ type submit struct {
 	spoiler     bool
 	subreddit   string
 	title       string
+}
+
+type SubmitResponse struct {
+	JsonNode struct {
+		DataNode struct {
+			Fullname string `json:"name"`
+		} `json:"data"`
+	} `json:"json"`
 }
