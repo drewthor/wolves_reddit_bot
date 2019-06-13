@@ -138,7 +138,7 @@ func (b *Boxscore) UpdateSeriesRecord() {
 		if err != nil {
 			log.Println("could not convert away playoff series wins to int")
 		}
-		log.Println(fmt.Sprintf("gameInSeries", gameInSeries))
+		log.Println(fmt.Sprintf("gameInSeries: %d", gameInSeries))
 		if (homeWins + awayWins) != gameInSeries {
 			log.Println("updating playoff series records")
 			homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
