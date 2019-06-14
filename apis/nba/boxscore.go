@@ -577,19 +577,15 @@ func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player) stri
 func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
 	title := ""
 	firstTeam := Team{}
-	firstTeamStats := TeamStats{}
 	firstTeamInfo := TeamBoxscoreInfo{}
 	firstTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	secondTeam := Team{}
-	secondTeamStats := TeamStats{}
 	secondTeamInfo := TeamBoxscoreInfo{}
 	secondTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
 		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
-		firstTeamStats = b.StatsNode.HomeTeamNode.TeamStats
 		firstTeamInfo = b.BasicGameDataNode.HomeTeamInfo
 		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
-		secondTeamStats = b.StatsNode.AwayTeamNode.TeamStats
 		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
 
 		if b.IsPlayoffGame() {
@@ -598,10 +594,8 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 		}
 	} else {
 		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
-		firstTeamStats = b.StatsNode.AwayTeamNode.TeamStats
 		firstTeamInfo = b.BasicGameDataNode.AwayTeamInfo
 		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
-		secondTeamStats = b.StatsNode.HomeTeamNode.TeamStats
 		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
 
 		if b.IsPlayoffGame() {
