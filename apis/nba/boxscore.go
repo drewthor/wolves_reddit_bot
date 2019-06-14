@@ -144,8 +144,10 @@ func (b *Boxscore) UpdateSeriesRecord() {
 			homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
 			if homeTeamWon {
 				b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
+				b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.WonSeries = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins == "4"
 			} else {
 				b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
+				b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.WonSeries = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins == "4"
 			}
 		}
 	}
@@ -651,14 +653,12 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 	}
 
 	title += strings.ToUpper(secondTeam.Nickname)
-	title += " "
 
 	if !b.IsPlayoffGame() {
-		title += fmt.Sprintf(teamRecordString, secondTeamInfo.Wins, secondTeamInfo.Losses)
 		title += " "
+		title += fmt.Sprintf(teamRecordString, secondTeamInfo.Wins, secondTeamInfo.Losses)
 	}
 
-	title += firstTeamStats.Points + "-" + secondTeamStats.Points
 	title += ","
 	title += " "
 
