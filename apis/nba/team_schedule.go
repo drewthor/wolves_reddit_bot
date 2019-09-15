@@ -46,6 +46,7 @@ type ScheduledGames map[string]ScheduledGame
 func GetScheduledGames(teamAPIPath, teamID string) ScheduledGames {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + teamAPIPath)
 	url := fmt.Sprintf(templateURI, teamID)
+	log.Println(url)
 	response, httpErr := http.Get(url)
 	if httpErr != nil {
 		log.Fatal(httpErr)

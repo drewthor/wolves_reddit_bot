@@ -1,10 +1,15 @@
 package main
 
 import (
+	"sync"
+
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/pkg/gfunctions/gt"
 )
 
 func main() {
-	gt.CreateGameThread(nba.MinnesotaTimberwolves)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	gt.CreateGameThread(nba.MinnesotaTimberwolves, &wg)
+	wg.Wait()
 }

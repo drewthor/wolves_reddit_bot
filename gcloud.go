@@ -3,6 +3,7 @@ package gcloud
 import (
 	"context"
 	"log"
+	"sync"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/pkg/gfunctions/gt"
@@ -14,8 +15,11 @@ type event struct {
 }
 
 func Receive(ctx context.Context, e event) error {
-	gt.CreateGameThread(nba.GoldenStateWarriors)
-	pgt.CreatePostGameThread(nba.GoldenStateWarriors)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go gt.CreateGameThread(nba.MinnesotaTimberwolves, &wg)
+	go pgt.CreatePostGameThread(nba.MinnesotaTimberwolves, &wg)
+	wg.Wait()
 	log.Printf("ran post game thread checker")
 	return nil
 }

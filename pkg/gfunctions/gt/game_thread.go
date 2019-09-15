@@ -2,6 +2,7 @@ package gt
 
 import (
 	"log"
+	"sync"
 	"time"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -9,7 +10,8 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/pkg/gcloud"
 )
 
-func CreateGameThread(teamTriCode nba.TriCode) {
+func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
+	defer wg.Done()
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
@@ -22,16 +24,20 @@ func CreateGameThread(teamTriCode nba.TriCode) {
 	log.Println(currentDateWestern)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	teamID := teams[teamTriCode].ID
-	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, teamID)
+	team, foundTeam := teams[teamTriCode]
+	if !foundTeam {
+		log.Println("failed to find team with TriCode: " + teamTriCode)
+		return
+	}
+	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, team.ID)
 	todaysGame, gameToday := scheduledGames[currentDateWestern]
-
-	datastore := new(gcloud.Datastore)
-	gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, teamID)
 
 	if gameToday {
 		log.Println("game today")
 		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		datastore := new(gcloud.Datastore)
+		gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
+
 		if (boxscore.DurationUntilGameStarts().Hours() < 1) && !boxscore.GameEnded() {
 			log.Println("game in progress")
 
@@ -42,6 +48,7 @@ func CreateGameThread(teamTriCode nba.TriCode) {
 			subreddit := "SeattleSockeye"
 			title := boxscore.GetRedditGameThreadTitle(teamTriCode, teams)
 			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players))
+
 			if exists && gameEvent.GameThread {
 				log.Println("updating post")
 				redditClient.UpdateUserText(gameEvent.GameThreadRedditPostFullname, content)
@@ -51,7 +58,7 @@ func CreateGameThread(teamTriCode nba.TriCode) {
 			}
 			gameEvent.CreatedTime = time.Now()
 			gameEvent.GameID = todaysGame.GameID
-			gameEvent.TeamID = teamID
+			gameEvent.TeamID = team.ID
 			gameEvent.GameThread = true
 			datastore.SaveTeamGameEvent(gameEvent)
 		}

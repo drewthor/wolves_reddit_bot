@@ -2,6 +2,7 @@ package pgt
 
 import (
 	"log"
+	"sync"
 	"time"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -9,7 +10,8 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/pkg/gcloud"
 )
 
-func CreatePostGameThread(teamTriCode nba.TriCode) {
+func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
+	defer wg.Done()
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
@@ -21,9 +23,14 @@ func CreatePostGameThread(teamTriCode nba.TriCode) {
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	teamID := teams[teamTriCode].ID
-	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, teamID)
+	team, foundTeam := teams[teamTriCode]
+	if !foundTeam {
+		log.Println("failed to find team with TriCode: " + teamTriCode)
+		return
+	}
+	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, team.ID)
 	todaysGame, gameToday := scheduledGames[currentDateWestern]
+	log.Println("checked for game")
 	if gameToday {
 		log.Println("game today")
 		todaysGameScoreboard := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateWestern, todaysGame.GameID)
@@ -38,7 +45,7 @@ func CreatePostGameThread(teamTriCode nba.TriCode) {
 				log.Println(gameEndTimeUTC)
 			}
 			datastore := new(gcloud.Datastore)
-			gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, teamID)
+			gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
 			if exists && gameEvent.PostGameThread {
 				log.Println("already found post")
 				return
@@ -54,7 +61,7 @@ func CreatePostGameThread(teamTriCode nba.TriCode) {
 
 			gameEvent.CreatedTime = time.Now()
 			gameEvent.GameID = todaysGame.GameID
-			gameEvent.TeamID = teamID
+			gameEvent.TeamID = team.ID
 			gameEvent.PostGameThread = true
 			datastore.SaveTeamGameEvent(gameEvent)
 		}

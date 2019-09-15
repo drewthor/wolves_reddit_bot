@@ -13,6 +13,7 @@
 
 # Config file
 reddit_config.json
+gcp.config
 
 #Google cloud platform
 .gcloudignore
