@@ -2,7 +2,6 @@ package pgt
 
 import (
 	"log"
-	"sync"
 	"time"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -10,8 +9,8 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/pkg/gcloud"
 )
 
-func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
-	defer wg.Done()
+func CreatePostGameThread(teamTriCode nba.TriCode /*, wg *sync.WaitGroup*/) {
+	//defer wg.Done()
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
@@ -54,7 +53,7 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
 			log.Println("authorized")
-			subreddit := "SeattleSockeye"
+			subreddit := "Timberwolves"
 			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 			content := boxscore.GetRedditPostGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players))
 			redditClient.SubmitNewPost(subreddit, title, content)

@@ -176,6 +176,11 @@ func (b *Boxscore) UpdateSeriesRecord() {
 func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID string) (TeamLeaders, TeamLeaders) {
 	var homeTeamLeaders, awayTeamLeaders TeamLeaders
 	for _, playerStats := range playersStats {
+		if len(playerStats.DidNotPlayStatus) > 0 {
+			// player did not play and instead of populating stats with 0's the nba api sends us "" which can break with the logic below
+			continue
+		}
+
 		var teamLeaders *TeamLeaders
 		if playerStats.TeamID == homeTeamID {
 			teamLeaders = &homeTeamLeaders
@@ -341,8 +346,12 @@ func getTeamStatsTableString(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamSt
 	for _, playerStats := range playersStats {
 		if playerStats.TeamID == teamBoxscoreInfo.TeamID {
 			playerString := getPlayerString(playerStats.ID, players)
+			playerMinutesString := playerStats.Minutes
+			if len(playerStats.DidNotPlayStatus) > 0 && len(playerStats.Minutes) == 0 {
+				playerMinutesString = playerStats.DidNotPlayStatus
+			}
 
-			teamStatsTableString += fmt.Sprintf(playerStatsString, playerString, playerStats.Minutes, playerStats.Points, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Turnovers, playerStats.Steals, playerStats.Blocks, playerStats.PersonalFouls, playerStats.PlusMinus)
+			teamStatsTableString += fmt.Sprintf(playerStatsString, playerString, playerMinutesString, playerStats.Points, playerStats.FieldGoalsMade, playerStats.FieldGoalsAttempted, playerStats.ThreePointsMade, playerStats.ThreePointsAttempted, playerStats.FreeThrowsMade, playerStats.FreeThrowsAttempted, playerStats.OffensiveRebounds, playerStats.TotalRebounds, playerStats.Assists, playerStats.Turnovers, playerStats.Steals, playerStats.Blocks, playerStats.PersonalFouls, playerStats.PlusMinus)
 		}
 	}
 	teamStatsTableString += fmt.Sprintf(totalsString, teamStats.Minutes, teamStats.Points, teamStats.FieldGoalsMade, teamStats.FieldGoalsAttempted, teamStats.FieldGoalPercentage, teamStats.ThreePointsMade, teamStats.ThreePointsAttempted, teamStats.ThreePointPercentage, teamStats.FreeThrowsMade, teamStats.FreeThrowsAttempted, teamStats.FreeThrowPercentage, teamStats.OffensiveRebounds, teamStats.TotalRebounds, teamStats.Assists, teamStats.Turnovers, teamStats.Steals, teamStats.Blocks, teamStats.PersonalFouls)
@@ -352,10 +361,20 @@ func getTeamStatsTableString(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamSt
 func getRefereeTableString(refereesInfo []RefereeInfo) string {
 	refereeTableString := ""
 	refereeTableString += "|**Referees**|\n"
-	refereeTableString += "|:-:|\n"
-	for _, referee := range refereesInfo {
-		refereeTableString += fmt.Sprintf("|%s|\n", referee.FullName)
+
+	if len(refereesInfo) > 0 {
+		refereeTableString += "|"
+
+		refereeInfosString := "|"
+		for _, referee := range refereesInfo {
+			refereeTableString += ":-:|"
+			refereeInfosString += fmt.Sprintf("%s|", referee.FullName)
+		}
+		refereeTableString += "\n"
+		refereeTableString += refereeInfosString
+		refereeTableString += "\n"
 	}
+
 	return refereeTableString
 }
 
@@ -558,17 +577,21 @@ func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player) stri
 	body := ""
 	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance)
 	body += "\n"
-	body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
-	body += "\n"
 
-	homeTeamLeaders, awayTeamLeaders := getTeamLeaders(b.StatsNode.PlayersStats, b.BasicGameDataNode.HomeTeamInfo.TeamID, b.BasicGameDataNode.AwayTeamInfo.TeamID)
-	body += getTeamLeadersTableString(b.BasicGameDataNode.HomeTeamInfo, homeTeamLeaders, b.BasicGameDataNode.AwayTeamInfo, awayTeamLeaders, players)
-	body += "\n"
+	if b.StatsNode != nil {
+		body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
+		body += "\n"
 
-	body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
-	body += "\n"
-	body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
-	body += "\n"
+		homeTeamLeaders, awayTeamLeaders := getTeamLeaders(b.StatsNode.PlayersStats, b.BasicGameDataNode.HomeTeamInfo.TeamID, b.BasicGameDataNode.AwayTeamInfo.TeamID)
+		body += getTeamLeadersTableString(b.BasicGameDataNode.HomeTeamInfo, homeTeamLeaders, b.BasicGameDataNode.AwayTeamInfo, awayTeamLeaders, players)
+		body += "\n"
+
+		body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+		body += "\n"
+		body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+		body += "\n"
+	}
+
 	body += getRefereeTableString(b.BasicGameDataNode.RefereeNode.Referees)
 	body += "\n"
 	return body
@@ -778,6 +801,7 @@ type PlayerStats struct {
 	Turnovers             string `json:"turnovers"`
 	Blocks                string `json:"blocks"`
 	PlusMinus             string `json:"plusMinus"`
+	DidNotPlayStatus      string `json:"dnp"`
 }
 
 type ArenaInfo struct {
