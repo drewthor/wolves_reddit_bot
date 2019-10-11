@@ -360,20 +360,29 @@ func getTeamStatsTableString(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamSt
 
 func getRefereeTableString(refereesInfo []RefereeInfo) string {
 	refereeTableString := ""
-	refereeTableString += "|**Referees**|\n"
 
-	if len(refereesInfo) > 0 {
-		refereeTableString += "|"
-
-		refereeInfosString := "|"
-		for _, referee := range refereesInfo {
-			refereeTableString += ":-:|"
-			refereeInfosString += fmt.Sprintf("%s|", referee.FullName)
-		}
-		refereeTableString += "\n"
-		refereeTableString += refereeInfosString
-		refereeTableString += "\n"
+	if len(refereesInfo) <= 0 {
+		return refereeTableString
 	}
+
+	refereeTableString += "|**Referees**|"
+
+	refereeInfosString := "|"
+	refereeFormatString := "|"
+
+	for i := 0; i < len(refereesInfo)-1; i++ {
+		refereeTableString += "|"
+	}
+	for _, referee := range refereesInfo {
+		refereeFormatString += ":-:|"
+		refereeInfosString += fmt.Sprintf("%s|", referee.FullName)
+	}
+
+	refereeTableString += "\n"
+	refereeTableString += refereeFormatString
+	refereeTableString += "\n"
+	refereeTableString += refereeInfosString
+	refereeTableString += "\n"
 
 	return refereeTableString
 }
@@ -524,10 +533,11 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 	}
 
 	title += firstTeamStats.Points + "-" + secondTeamStats.Points
-	title += ","
-	title += " "
 
 	if b.IsPlayoffGame() {
+		title += ","
+		title += " "
+
 		// Playoff series info
 		log.Println(fmt.Sprintf("%s: %s", firstTeamInfo.TriCode, firstTeamPlayoffsGameTeamInfo.SeriesWins))
 		log.Println(fmt.Sprintf("%s: %s", secondTeamInfo.TriCode, secondTeamPlayoffsGameTeamInfo.SeriesWins))
@@ -676,10 +686,10 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 		title += fmt.Sprintf(teamRecordString, secondTeamInfo.Wins, secondTeamInfo.Losses)
 	}
 
-	title += ","
-	title += " "
-
 	if b.IsPlayoffGame() {
+		title += ","
+		title += " "
+
 		// Playoff series info
 		log.Println(fmt.Sprintf("%s: %s", firstTeamInfo.TriCode, firstTeamPlayoffsGameTeamInfo.SeriesWins))
 		log.Println(fmt.Sprintf("%s: %s", secondTeamInfo.TriCode, secondTeamPlayoffsGameTeamInfo.SeriesWins))
