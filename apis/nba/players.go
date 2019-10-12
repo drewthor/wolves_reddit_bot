@@ -2,6 +2,8 @@ package nba
 
 import (
 	"encoding/json"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -22,10 +24,15 @@ type Player struct {
 func GetPlayers(playersAPIPath string) map[string]Player {
 	url := makeURIFormattable(nbaAPIBaseURI + playersAPIPath)
 	response, httpErr := http.Get(url)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if httpErr != nil {
 		log.Fatal(httpErr)
 	}
-	defer response.Body.Close()
 
 	playersResult := Players{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&playersResult)

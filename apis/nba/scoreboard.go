@@ -3,6 +3,8 @@ package nba
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -33,10 +35,15 @@ func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) Game
 	templateURI := makeURIFormattable(nbaAPIBaseURI + scoreboardAPIPath)
 	url := fmt.Sprintf(templateURI, todaysDate)
 	response, httpErr := http.Get(url)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if httpErr != nil {
 		log.Fatal(httpErr)
 	}
-	defer response.Body.Close()
 
 	scoreboardResult := Scoreboard{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&scoreboardResult)

@@ -3,6 +3,8 @@ package nba
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"math"
 	"net/http"
@@ -829,10 +831,15 @@ func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
 	url := fmt.Sprintf(templateURI, todaysDate, gameID)
 	log.Println(url)
 	response, httpErr := http.Get(url)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if httpErr != nil {
 		log.Fatal(httpErr)
 	}
-	defer response.Body.Close()
 
 	boxscoreResult := Boxscore{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&boxscoreResult)

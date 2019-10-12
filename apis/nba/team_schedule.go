@@ -3,6 +3,8 @@ package nba
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -48,10 +50,15 @@ func GetScheduledGames(teamAPIPath, teamID string) ScheduledGames {
 	url := fmt.Sprintf(templateURI, teamID)
 	log.Println(url)
 	response, httpErr := http.Get(url)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if httpErr != nil {
 		log.Fatal(httpErr)
 	}
-	defer response.Body.Close()
 
 	teamScheduleResult := TeamSchedule{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&teamScheduleResult)

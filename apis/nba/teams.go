@@ -2,6 +2,8 @@ package nba
 
 import (
 	"encoding/json"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -23,10 +25,15 @@ type Team struct {
 func GetTeams(teamsAPIPath string) map[TriCode]Team {
 	url := nbaAPIBaseURI + teamsAPIPath
 	response, httpErr := http.Get(url)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if httpErr != nil {
 		log.Fatal(httpErr)
 	}
-	defer response.Body.Close()
 
 	teamsResult := TeamsResult{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&teamsResult)

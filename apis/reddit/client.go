@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -98,10 +100,15 @@ func (c *Client) Authorize() {
 	req.Header.Set("User-Agent", userAgent)
 	req.SetBasicAuth(c.config.ClientID, c.config.ClientSecret)
 	response, err := c.httpClient.Do(req)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer response.Body.Close()
 	rToken := redditToken{}
 	if response.StatusCode == http.StatusOK {
 		decoder := json.NewDecoder(response.Body)
@@ -171,13 +178,18 @@ func (c *Client) SubmitNewPost(subreddit, title, content string) SubmitResponse 
 	request.Header.Set("User-Agent", userAgent)
 
 	response, err := c.httpClient.Do(request)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if err != nil {
 		log.Fatal(err)
 	}
 	if response.StatusCode != 200 {
 		log.Fatal("Failed to submit post with status code: " + strconv.Itoa(response.StatusCode))
 	}
-	defer response.Body.Close()
 
 	submitResponse := SubmitResponse{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&submitResponse)
@@ -212,6 +224,12 @@ func (c *Client) UpdateUserText(thingFullname, content string) {
 	request.Header.Set("User-Agent", userAgent)
 
 	response, err := c.httpClient.Do(request)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if err != nil {
 		log.Fatal(err)
 	}

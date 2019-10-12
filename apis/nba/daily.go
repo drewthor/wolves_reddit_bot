@@ -2,6 +2,8 @@ package nba
 
 import (
 	"encoding/json"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -24,10 +26,15 @@ type DailyAPIPaths struct {
 func GetDailyAPIPaths() DailyAPIPaths {
 	url := nbaAPIBaseURI + NBADailyAPIPath
 	response, httpErr := http.Get(url)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
 	if httpErr != nil {
 		log.Fatal(httpErr)
 	}
-	defer response.Body.Close()
 
 	dailyAPIResult := DailyAPI{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&dailyAPIResult)
