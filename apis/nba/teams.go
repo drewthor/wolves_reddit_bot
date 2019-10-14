@@ -42,9 +42,8 @@ func GetTeams(teamsAPIPath string) map[TriCode]Team {
 	}
 	teamMap := map[TriCode]Team{}
 	for _, team := range teamsResult.LeagueNode.Teams {
-		if team.IsNBAFranchise {
-			teamMap[team.TriCode] = team
-		}
+		teamMap[team.TriCode] = team
 	}
+
 	return teamMap
 }
