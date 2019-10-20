@@ -32,13 +32,14 @@ func (d *Datastore) initClient() {
 }
 
 type TeamGameEvent struct {
-	CreatedTime                  time.Time
-	GameID                       string
-	TeamID                       string
-	PreGameThread                bool
-	GameThread                   bool
-	GameThreadRedditPostFullname string
-	PostGameThread               bool
+	CreatedTime                      time.Time
+	GameID                           string
+	TeamID                           string
+	PreGameThread                    bool
+	GameThread                       bool
+	GameThreadRedditPostFullname     string
+	PostGameThread                   bool
+	PostGameThreadRedditPostFullname string
 }
 
 func MakeKeyName(gameID, teamID string) string {

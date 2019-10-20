@@ -56,8 +56,11 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			log.Println("authorized")
 			subreddit := "Timberwolves"
 			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
-			content := boxscore.GetRedditPostGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players))
-			redditClient.SubmitNewPost(subreddit, title, content)
+			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.GameThreadRedditPostFullname}, subreddit)
+			gameThreadURL := thingURLMapping[gameEvent.GameThreadRedditPostFullname]
+			content := boxscore.GetRedditPostGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), gameThreadURL)
+			submitResponse := redditClient.SubmitNewPost(subreddit, title, content)
+			gameEvent.PostGameThreadRedditPostFullname = submitResponse.JsonNode.DataNode.Fullname
 
 			gameEvent.CreatedTime = time.Now()
 			gameEvent.GameID = todaysGame.GameID

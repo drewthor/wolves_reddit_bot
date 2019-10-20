@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -69,13 +70,15 @@ func (c *Client) loadConfiguration(file string) {
 		c.userConfig.ClientID = os.Getenv("clientID")
 		c.userConfig.ClientSecret = os.Getenv("clientSecret")
 	} else {
-		jsonParser := json.NewDecoder(configFile)
-		jsonParser.Decode(&c.userConfig)
+		decodeErr := json.NewDecoder(configFile).Decode(&c.userConfig)
+		if decodeErr != nil {
+			log.Fatal("Failed to decode user reddit config file")
+		}
 	}
 	c.config = &oauth2.Config{
 		ClientID:     c.userConfig.ClientID,
 		ClientSecret: c.userConfig.ClientSecret,
-		Scopes:       []string{"submit", "edit"},
+		Scopes:       []string{"edit", "read", "submit"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  authURI,
 			TokenURL: authTokenURI,
@@ -111,8 +114,7 @@ func (c *Client) Authorize() {
 	}
 	rToken := redditToken{}
 	if response.StatusCode == http.StatusOK {
-		decoder := json.NewDecoder(response.Body)
-		err = decoder.Decode(&rToken)
+		err = json.NewDecoder(response.Body).Decode(&rToken)
 		if err != nil {
 			log.Fatal(err.Error())
 		}
@@ -187,7 +189,7 @@ func (c *Client) SubmitNewPost(subreddit, title, content string) SubmitResponse 
 	if err != nil {
 		log.Fatal(err)
 	}
-	if response.StatusCode != 200 {
+	if response.StatusCode != http.StatusOK {
 		log.Fatal("Failed to submit post with status code: " + strconv.Itoa(response.StatusCode))
 	}
 
@@ -233,7 +235,56 @@ func (c *Client) UpdateUserText(thingFullname, content string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if response.StatusCode != 200 {
+	if response.StatusCode != http.StatusOK {
 		log.Fatal("Failed to update user text with status code: " + strconv.Itoa(response.StatusCode))
 	}
+}
+
+func (c *Client) GetThingURLs(thingFullnames []string, subreddit string) map[string]string {
+	if c.httpClient == nil || c.token == nil {
+		c.Authorize()
+	}
+
+	listingsRequestURI := listingsURI + strings.Join(thingFullnames, ",")
+	request, err := http.NewRequest("GET", listingsRequestURI, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	request.Header.Set("User-Agent", userAgent)
+
+	response, err := c.httpClient.Do(request)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	thingURLMappings := map[string]string{}
+
+	if response.StatusCode == http.StatusOK {
+		lResponse := listingsResponse{}
+		decodeErr := json.NewDecoder(response.Body).Decode(&lResponse)
+		if decodeErr != nil {
+			log.Fatal("Failed to decode listings response")
+		}
+
+		for _, listing := range lResponse.DataNode.Listings {
+			for _, thingFullname := range thingFullnames {
+				if listing.DataNode.Name == thingFullname {
+					thingURLMappings[thingFullname] = listing.DataNode.URL
+					break
+				}
+			}
+		}
+
+	} else {
+		log.Fatal("Failed to get post urls with status code: " + strconv.Itoa(response.StatusCode))
+	}
+
+	return thingURLMappings
 }
