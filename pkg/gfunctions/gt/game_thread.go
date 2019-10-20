@@ -37,6 +37,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
 		datastore := new(gcloud.Datastore)
 		gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
+		subreddit := "Timberwolves"
 
 		if (boxscore.DurationUntilGameStarts().Hours() < 1) && !boxscore.GameEnded() {
 			log.Println("game in progress")
@@ -45,9 +46,8 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
 			log.Println("authorized")
-			subreddit := "Timberwolves"
 			title := boxscore.GetRedditGameThreadTitle(teamTriCode, teams)
-			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players))
+			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), "" /*postGameThreadURL*/)
 
 			if exists && gameEvent.GameThread {
 				log.Println("updating post")
@@ -65,6 +65,12 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 
 		if exists && gameEvent.GameThread && gameEvent.PostGameThread {
 			log.Println("adding post game thread link to game thread")
+			redditClient := reddit.Client{}
+			redditClient.Authorize()
+			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.PostGameThreadRedditPostFullname}, subreddit)
+			postGameThreadURL := thingURLMapping[gameEvent.PostGameThreadRedditPostFullname]
+			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), postGameThreadURL)
+			redditClient.UpdateUserText(gameEvent.GameThreadRedditPostFullname, content)
 		}
 	}
 }

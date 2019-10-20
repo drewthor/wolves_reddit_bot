@@ -258,32 +258,45 @@ func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID st
 	return homeTeamLeaders, awayTeamLeaders
 }
 
-func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDateEastern, attendance string) string {
+func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDateEastern, attendance string, gameThread bool, otherThreadURL string) string {
 	gameInfoTableString := "|**Game Info**||\n"
 	gameInfoTableString += "|:-:|:-:|\n"
 	gameInfoTableString += fmt.Sprintf("|**Arena**|%s|\n", arenaName)
-	gameInfoTableString += fmt.Sprintf("|**Attendance**|%s|\n", attendance)
 	gameInfoTableString += fmt.Sprintf("|**Location**|%s, %s|\n", city, country)
+	gameInfoTableString += fmt.Sprintf("|**Attendance**|%s|\n", attendance)
 
-	gameTime := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
+	gameTimeEastern := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
+	centralLocation, locationErr := time.LoadLocation("America/Chicago")
+	if locationErr != nil {
+		log.Println("Failed to load Minneapolis location")
+	}
+	gameTimeCentral := gameTimeEastern.In(centralLocation)
+	gameTimeCentralString := gameTimeCentral.Format("3:04 PM MST")
 
-	gameTimeHour := gameTime.Hour()
+	gameTimeHour := gameTimeCentral.Hour()
 	timePM := false
 	if gameTimeHour > 12 {
 		gameTimeHour = gameTimeHour - 12
 		timePM = true
 	}
-	gameTimeHourMinute := fmt.Sprintf("%02d%02d", gameTimeHour, gameTime.Minute())
+	gameTimeHourMinute := fmt.Sprintf("%02d%02d", gameTimeHour, gameTimeCentral.Minute())
 	if timePM {
 		gameTimeHourMinute += "PM"
 	} else {
 		gameTimeHourMinute += "AM"
 	}
-	timeStringURL := fmt.Sprintf("https://time.is/compare/%s_%v_%s_%v__in_New_York", gameTimeHourMinute, gameTime.Day(), gameTime.Month().String(), gameTime.Year())
+	timeStringURL := fmt.Sprintf("https://time.is/compare/%s_%v_%s_%v__in_Minneapolis", gameTimeHourMinute, gameTimeCentral.Day(), gameTimeCentral.Month().String(), gameTimeCentral.Year())
 
-	timeString := fmt.Sprintf("%s [other time zones](%s)", startTimeEastern, timeStringURL)
+	timeString := fmt.Sprintf("%s [other time zones](%s)", gameTimeCentralString, timeStringURL)
 
 	gameInfoTableString += fmt.Sprintf("|**Time**|%s|\n", timeString)
+
+	if gameThread {
+		gameInfoTableString += fmt.Sprintf("|**Post Game Thread**|[link](%s)|\n", otherThreadURL)
+	} else {
+		gameInfoTableString += fmt.Sprintf("|**Game Thread**|[link](%s)|\n", otherThreadURL)
+	}
+
 	return gameInfoTableString
 }
 
@@ -389,9 +402,9 @@ func getRefereeTableString(refereesInfo []RefereeInfo) string {
 	return refereeTableString
 }
 
-func (b *Boxscore) GetRedditPostGameThreadBodyString(players map[string]Player) string {
+func (b *Boxscore) GetRedditPostGameThreadBodyString(players map[string]Player, gameThreadURL string) string {
 	body := ""
-	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance)
+	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance, false /*gameThread*/, gameThreadURL)
 	body += "\n"
 	body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
 	body += "\n"
@@ -585,9 +598,9 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 	return title
 }
 
-func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player) string {
+func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, postGameThreadURL string) string {
 	body := ""
-	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance)
+	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance, true /*gameThread*/, postGameThreadURL)
 	body += "\n"
 
 	if b.StatsNode != nil {
