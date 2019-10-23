@@ -7,6 +7,7 @@ require (
 	cloud.google.com/go/datastore v1.0.0
 	github.com/google/go-cmp v0.3.1 // indirect
 	go.opencensus.io v0.22.1 // indirect
+	golang.org/dl v0.0.0-20191017231735-20061d63e9c1 // indirect
 	golang.org/x/exp v0.0.0-20190912063710-ac5d2bfcbfe0 // indirect
 	golang.org/x/net v0.0.0-20190912160710-24e19bdeb0f2 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45

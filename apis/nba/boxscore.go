@@ -604,8 +604,10 @@ func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, post
 	body += "\n"
 
 	if b.StatsNode != nil {
-		body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
-		body += "\n"
+		if len(b.BasicGameDataNode.HomeTeamInfo.PointsByQuarter) > 0 && len(b.BasicGameDataNode.AwayTeamInfo.PointsByQuarter) > 0 {
+			body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
+			body += "\n"
+		}
 
 		homeTeamLeaders, awayTeamLeaders := getTeamLeaders(b.StatsNode.PlayersStats, b.BasicGameDataNode.HomeTeamInfo.TeamID, b.BasicGameDataNode.AwayTeamInfo.TeamID)
 		body += getTeamLeadersTableString(b.BasicGameDataNode.HomeTeamInfo, homeTeamLeaders, b.BasicGameDataNode.AwayTeamInfo, awayTeamLeaders, players)
