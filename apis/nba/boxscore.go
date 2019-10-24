@@ -27,25 +27,31 @@ type Boxscore struct {
 		Arena                ArenaInfo         `json:"arena"`
 		Attendance           string            `json:"attendance"`
 		Clock                string            `json:"clock"`
-		GameIsActivated      bool              `json:"isGameActivated"` // see UpdateSeriesRecord
+		GameIsActivated      bool              `json:"isGameActivated"` // see UpdateTeamsRegularSeasonRecords
 		GameStartTimeEastern string            `json:"startTimeEastern"`
 		GameStartDateEastern string            `json:"startDateEastern"`
 		GameEndTimeUTC       string            `json:"endTimeUTC,omitempty"`
 		HomeTeamInfo         TeamBoxscoreInfo  `json:"hTeam"`
 		AwayTeamInfo         TeamBoxscoreInfo  `json:"vTeam"`
 		PlayoffsNode         *PlayoffsGameInfo `json:"playoffs,omitempty"`
-		RefereeNode          struct {
-			Referees []RefereeInfo `json:"formatted"`
-		} `json:"officials"`
+		// season stage IDs
+		// 1: preseason
+		// 2: regular season
+		// 3: playoffs
+		SeasonStageID int `json:"seasonStageId"`
 
 		PeriodNode struct {
 			CurrentPeriod int `json:"current"`
 		} `json:"period"`
+
+		RefereeNode struct {
+			Referees []RefereeInfo `json:"formatted"`
+		} `json:"officials"`
 	} `json:"basicGameData"`
 }
 
 func (b *Boxscore) IsPlayoffGame() bool {
-	return b.BasicGameDataNode.PlayoffsNode != nil
+	return b.BasicGameDataNode.SeasonStageID == 3 || b.BasicGameDataNode.PlayoffsNode != nil
 }
 
 func (b *Boxscore) GameEnded() bool {
@@ -126,32 +132,9 @@ func incrementString(str string) string {
 	return str
 }
 
-func (b *Boxscore) UpdateSeriesRecord() {
+func (b *Boxscore) UpdateTeamsRegularSeasonRecords() {
 	if b.IsPlayoffGame() {
-		homeWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
-		if err != nil {
-			log.Println("could not convert home playoff series wins to int")
-		}
-		awayWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
-		if err != nil {
-			log.Println("could not convert away playoff series wins to int")
-		}
-		gameInSeries, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.GameInSeries)
-		if err != nil {
-			log.Println("could not convert away playoff series wins to int")
-		}
-		log.Println(fmt.Sprintf("gameInSeries: %d", gameInSeries))
-		if (homeWins + awayWins) != gameInSeries {
-			log.Println("updating playoff series records")
-			homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
-			if homeTeamWon {
-				b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
-				b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.WonSeries = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins == "4"
-			} else {
-				b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
-				b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.WonSeries = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins == "4"
-			}
-		}
+		return
 	}
 
 	log.Println(fmt.Sprintf("GameIsActivated: %t", b.BasicGameDataNode.GameIsActivated))
@@ -163,15 +146,52 @@ func (b *Boxscore) UpdateSeriesRecord() {
 		return
 	}
 
-	log.Println("Updating series record")
+	log.Println("Updating team regular season records")
 
 	homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
 	if homeTeamWon {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
 		b.BasicGameDataNode.AwayTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesLosses)
+		b.BasicGameDataNode.HomeTeamInfo.Wins = incrementString(b.BasicGameDataNode.HomeTeamInfo.Wins)
+		b.BasicGameDataNode.AwayTeamInfo.Losses = incrementString(b.BasicGameDataNode.AwayTeamInfo.Losses)
 	} else {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesLosses)
 		b.BasicGameDataNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesWins)
+		b.BasicGameDataNode.HomeTeamInfo.Losses = incrementString(b.BasicGameDataNode.HomeTeamInfo.Losses)
+		b.BasicGameDataNode.AwayTeamInfo.Wins = incrementString(b.BasicGameDataNode.AwayTeamInfo.Wins)
+	}
+}
+
+func (b *Boxscore) UpdateTeamsPlayoffsSeriesRecords() {
+	if !b.IsPlayoffGame() {
+		return
+	}
+
+	log.Println("Updating team playoff records")
+
+	homeWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
+	if err != nil {
+		log.Println("could not convert home playoff series wins to int")
+	}
+	awayWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
+	if err != nil {
+		log.Println("could not convert away playoff series wins to int")
+	}
+	gameInSeries, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.GameInSeries)
+	if err != nil {
+		log.Println("could not convert away playoff series wins to int")
+	}
+	log.Println(fmt.Sprintf("gameInSeries: %d", gameInSeries))
+	if (homeWins + awayWins) != gameInSeries {
+		log.Println("updating playoff series records")
+		homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
+		if homeTeamWon {
+			b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
+			b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.WonSeries = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins == "4"
+		} else {
+			b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
+			b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.WonSeries = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins == "4"
+		}
 	}
 }
 
@@ -863,7 +883,8 @@ func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
 	}
 	if boxscoreResult.GameEnded() {
 		log.Println("updating series record")
-		boxscoreResult.UpdateSeriesRecord()
+		boxscoreResult.UpdateTeamsPlayoffsSeriesRecords()
+		boxscoreResult.UpdateTeamsRegularSeasonRecords()
 	}
 	return boxscoreResult
 }
