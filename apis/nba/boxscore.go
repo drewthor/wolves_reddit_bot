@@ -148,7 +148,16 @@ func (b *Boxscore) UpdateTeamsRegularSeasonRecords() {
 
 	log.Println("Updating team regular season records")
 
-	homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
+	homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
+	if err != nil {
+		log.Println("could not convert home regular season points to int")
+	}
+	awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
+	if err != nil {
+		log.Println("could not convert away regular season points to int")
+	}
+
+	homeTeamWon := homeTeamPoints > awayTeamPoints
 	if homeTeamWon {
 		b.BasicGameDataNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
 		b.BasicGameDataNode.AwayTeamInfo.SeriesLosses = incrementString(b.BasicGameDataNode.AwayTeamInfo.SeriesLosses)
@@ -184,7 +193,17 @@ func (b *Boxscore) UpdateTeamsPlayoffsSeriesRecords() {
 	log.Println(fmt.Sprintf("gameInSeries: %d", gameInSeries))
 	if (homeWins + awayWins) != gameInSeries {
 		log.Println("updating playoff series records")
-		homeTeamWon := b.StatsNode.HomeTeamNode.TeamStats.Points > b.StatsNode.AwayTeamNode.TeamStats.Points
+
+		homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
+		if err != nil {
+			log.Println("could not convert home playoff points to int")
+		}
+		awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
+		if err != nil {
+			log.Println("could not convert away playoff points to int")
+		}
+
+		homeTeamWon := homeTeamPoints > awayTeamPoints
 		if homeTeamWon {
 			b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins = incrementString(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
 			b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.WonSeries = b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins == "4"
