@@ -132,9 +132,9 @@ func (b *Boxscore) GetOpponent(team TriCode) TriCode {
 func incrementString(str string) string {
 	// convert string to a number
 	i, err := strconv.Atoi(str)
-  if err != nil {
-    log.Fatal("could not convert string: " + str "to int")
-  }
+	if err != nil {
+		log.Fatal("could not convert string: " + str + "to int")
+	}
 
 	// add one to the number
 	i = i + 1
