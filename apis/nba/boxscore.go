@@ -65,7 +65,17 @@ func (b *Boxscore) GameEnded() bool {
 		return true
 	}
 	noTimeRemaining := b.BasicGameDataNode.Clock == "0.0" || b.BasicGameDataNode.Clock == ""
-	gameNotTied := b.StatsNode.HomeTeamNode.TeamStats.Points != b.StatsNode.AwayTeamNode.TeamStats.Points
+
+	homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
+	if err != nil {
+		log.Fatal("could not convert home team points to int")
+	}
+	awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
+	if err != nil {
+		log.Fatal("could not convert away team points to int")
+	}
+
+	gameNotTied := homeTeamPoints != awayTeamPoints
 	log.Println(fmt.Sprintf("clock: %s", b.BasicGameDataNode.Clock))
 	log.Println(fmt.Sprintf("noTimeRemaining: %t", noTimeRemaining))
 	log.Println(fmt.Sprintf("gameNotTied: %t", gameNotTied))
@@ -121,7 +131,10 @@ func (b *Boxscore) GetOpponent(team TriCode) TriCode {
 
 func incrementString(str string) string {
 	// convert string to a number
-	i, _ := strconv.Atoi(str)
+	i, err := strconv.Atoi(str)
+  if err != nil {
+    log.Fatal("could not convert string: " + str "to int")
+  }
 
 	// add one to the number
 	i = i + 1
@@ -150,11 +163,11 @@ func (b *Boxscore) UpdateTeamsRegularSeasonRecords() {
 
 	homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
 	if err != nil {
-		log.Println("could not convert home regular season points to int")
+		log.Fatal("could not convert home regular season points to int")
 	}
 	awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
 	if err != nil {
-		log.Println("could not convert away regular season points to int")
+		log.Fatal("could not convert away regular season points to int")
 	}
 
 	homeTeamWon := homeTeamPoints > awayTeamPoints
@@ -180,15 +193,15 @@ func (b *Boxscore) UpdateTeamsPlayoffsSeriesRecords() {
 
 	homeWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.HomeTeamInfo.SeriesWins)
 	if err != nil {
-		log.Println("could not convert home playoff series wins to int")
+		log.Fatal("could not convert home playoff series wins to int")
 	}
 	awayWins, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo.SeriesWins)
 	if err != nil {
-		log.Println("could not convert away playoff series wins to int")
+		log.Fatal("could not convert away playoff series wins to int")
 	}
 	gameInSeries, err := strconv.Atoi(b.BasicGameDataNode.PlayoffsNode.GameInSeries)
 	if err != nil {
-		log.Println("could not convert away playoff series wins to int")
+		log.Fatal("could not convert away playoff series wins to int")
 	}
 	log.Println(fmt.Sprintf("gameInSeries: %d", gameInSeries))
 	if (homeWins + awayWins) != gameInSeries {
@@ -196,11 +209,11 @@ func (b *Boxscore) UpdateTeamsPlayoffsSeriesRecords() {
 
 		homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
 		if err != nil {
-			log.Println("could not convert home playoff points to int")
+			log.Fatal("could not convert home playoff points to int")
 		}
 		awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
 		if err != nil {
-			log.Println("could not convert away playoff points to int")
+			log.Fatal("could not convert away playoff points to int")
 		}
 
 		homeTeamWon := homeTeamPoints > awayTeamPoints
@@ -231,7 +244,7 @@ func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID st
 
 		playerPoints, err := strconv.Atoi(playerStats.Points)
 		if err != nil {
-			log.Println("failed to convert points to string")
+			log.Fatal("failed to convert points to string")
 		}
 
 		if playerPoints == teamLeaders.Points {
@@ -244,7 +257,7 @@ func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID st
 
 		playerRebounds, err := strconv.Atoi(playerStats.TotalRebounds)
 		if err != nil {
-			log.Println("failed to convert rebounds to string")
+			log.Fatal("failed to convert rebounds to string")
 		}
 
 		if playerRebounds == teamLeaders.Rebounds {
@@ -257,7 +270,7 @@ func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID st
 
 		playerAssists, err := strconv.Atoi(playerStats.Assists)
 		if err != nil {
-			log.Println("failed to convert assists to string")
+			log.Fatal("failed to convert assists to string")
 		}
 
 		if playerAssists == teamLeaders.Assists {
@@ -270,7 +283,7 @@ func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID st
 
 		playerBlocks, err := strconv.Atoi(playerStats.Blocks)
 		if err != nil {
-			log.Println("failed to convert blocks to string")
+			log.Fatal("failed to convert blocks to string")
 		}
 
 		if playerBlocks == teamLeaders.Blocks {
@@ -283,7 +296,7 @@ func getTeamLeaders(playersStats []PlayerStats, homeTeamID string, awayTeamID st
 
 		playerSteals, err := strconv.Atoi(playerStats.Steals)
 		if err != nil {
-			log.Println("failed to convert steals to string")
+			log.Fatal("failed to convert steals to string")
 		}
 
 		if playerSteals == teamLeaders.Steals {
@@ -307,7 +320,7 @@ func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDat
 	gameTimeEastern := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
 	centralLocation, locationErr := time.LoadLocation("America/Chicago")
 	if locationErr != nil {
-		log.Println("Failed to load Minneapolis location")
+		log.Fatal("Failed to load Minneapolis location")
 	}
 	gameTimeCentral := gameTimeEastern.In(centralLocation)
 	gameTimeCentralString := gameTimeCentral.Format("3:04 PM MST")
@@ -598,12 +611,12 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 
 		firstTeamWins, err := strconv.Atoi(firstTeamPlayoffsGameTeamInfo.SeriesWins)
 		if err != nil {
-			log.Println("failed to convert first team's series wins to int")
+			log.Fatal("failed to convert first team's series wins to int")
 		}
 
 		secondTeamWins, err := strconv.Atoi(secondTeamPlayoffsGameTeamInfo.SeriesWins)
 		if err != nil {
-			log.Println("failed to convert second team's series wins to int")
+			log.Fatal("failed to convert second team's series wins to int")
 		}
 
 		if firstTeamWins == secondTeamWins {
@@ -752,12 +765,12 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 
 		firstTeamWins, err := strconv.Atoi(firstTeamPlayoffsGameTeamInfo.SeriesWins)
 		if err != nil {
-			log.Println("failed to convert first team's series wins to int")
+			log.Fatal("failed to convert first team's series wins to int")
 		}
 
 		secondTeamWins, err := strconv.Atoi(secondTeamPlayoffsGameTeamInfo.SeriesWins)
 		if err != nil {
-			log.Println("failed to convert second team's series wins to int")
+			log.Fatal("failed to convert second team's series wins to int")
 		}
 
 		if firstTeamWins == secondTeamWins {
