@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"sort"
 )
 
 type TeamSchedule struct {
@@ -17,6 +18,7 @@ type TeamSchedule struct {
 
 type ScheduledGame struct {
 	GameID           string            `json:"gameId"`
+	SeasonStage      seasonStage       `json:"seasonStageId"`
 	StartDateEastern string            `json:"startDateEastern"`
 	StartTimeUTC     string            `json:"startTimeUTC"`
 	PlayoffsNode     *PlayoffsGameInfo `json:"playoffs,omitempty"`
@@ -43,6 +45,7 @@ type PlayoffsGameTeamInfo struct {
 	WonSeries  bool   `json:"isSeriesWinner"`
 }
 
+// map from StartDateEastern to the ScheduledGame
 type ScheduledGames map[string]ScheduledGame
 
 func GetScheduledGames(teamAPIPath, teamID string) ScheduledGames {
@@ -86,4 +89,68 @@ func (s *ScheduledGames) HaveAnotherMatchup(opposingTeam TriCode, todaysDate str
 		}
 	}
 	return false
+}
+
+type byStartDate []ScheduledGame
+
+func (b byStartDate) Len() int {
+	return len(b)
+}
+
+func (b byStartDate) Swap(i, j int) {
+	b[i], b[j] = b[j], b[i]
+}
+
+func (b byStartDate) Less(i, j int) bool {
+	firstTime := makeGoTimeFromAPIData("1200" /*startTimeEastern*/, b[i].StartDateEastern)
+	secondTime := makeGoTimeFromAPIData("1200" /*startTimeEastern*/, b[j].StartDateEastern)
+	return firstTime.Before(secondTime)
+}
+
+func (s *ScheduledGames) CurrentGameNumber(gameID string, stage seasonStage) (int, bool) {
+	var preSeasonGames []ScheduledGame
+	var regularSeasonGames []ScheduledGame
+	var postSeasonGames []ScheduledGame
+
+	for _, scheduledGame := range *s {
+		switch scheduledGame.SeasonStage {
+		case preSeason:
+			preSeasonGames = append(preSeasonGames, scheduledGame)
+			break
+		case regularSeason:
+			regularSeasonGames = append(regularSeasonGames, scheduledGame)
+			break
+		case postSeason:
+			postSeasonGames = append(postSeasonGames, scheduledGame)
+			break
+		}
+	}
+	switch stage {
+	case preSeason:
+		sort.Sort(byStartDate(preSeasonGames))
+		for i, game := range preSeasonGames {
+			if game.GameID == gameID {
+				return i + 1, true
+			}
+		}
+		break
+	case regularSeason:
+		sort.Sort(byStartDate(regularSeasonGames))
+		for i, game := range regularSeasonGames {
+			if game.GameID == gameID {
+				return i + 1, true
+			}
+		}
+		break
+	case postSeason:
+		sort.Sort(byStartDate(postSeasonGames))
+		for i, game := range postSeasonGames {
+			if game.GameID == gameID {
+				return i + 1, true
+			}
+		}
+		break
+	}
+	// game not found
+	return -1, false
 }

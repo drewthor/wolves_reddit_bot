@@ -65,6 +65,14 @@ func getPlayerString(playerID string, players map[string]Player) string {
 	return fmt.Sprintf(playerString, firstInitial, lastName)
 }
 
+type seasonStage int
+
+const (
+	preSeason     seasonStage = 1
+	regularSeason seasonStage = 2
+	postSeason    seasonStage = 3
+)
+
 type TriCode string
 
 const (

@@ -38,7 +38,7 @@ type Boxscore struct {
 		// 1: preseason
 		// 2: regular season
 		// 3: playoffs
-		SeasonStageID int `json:"seasonStageId"`
+		SeasonStage seasonStage `json:"seasonStageId"`
 
 		PeriodNode struct {
 			CurrentPeriod int `json:"current"`
@@ -51,7 +51,7 @@ type Boxscore struct {
 }
 
 func (b *Boxscore) IsPlayoffGame() bool {
-	return b.BasicGameDataNode.SeasonStageID == 3 || b.BasicGameDataNode.PlayoffsNode != nil
+	return b.BasicGameDataNode.SeasonStage == postSeason || b.BasicGameDataNode.PlayoffsNode != nil
 }
 
 func (b *Boxscore) GameEnded() bool {
@@ -145,7 +145,7 @@ func incrementString(str string) string {
 	return str
 }
 
-func (b *Boxscore) UpdateTeamsRegularSeasonRecords() {
+func (b *Boxscore) UpdateTeamsRegularSeasonRecords(currentGameNumber int) {
 	if b.IsPlayoffGame() {
 		return
 	}
@@ -155,7 +155,22 @@ func (b *Boxscore) UpdateTeamsRegularSeasonRecords() {
 	// they do eventually update the series wins and losses, but by then we should have already posted the thread
 	// isGameActivated might be the trigger/think to look at for if the series has been updated see https://github.com/f1uk3r/Some-Python-Scripts/blob/master/reddit-nba-bot/reddit-boxscore-bot.py
 	// update: this does not appear to be reliable either
+	// update 10/30/2019: the nba appears to be updating records in time
 	if !b.BasicGameDataNode.GameIsActivated {
+		return
+	}
+
+	homeTeamWins, err := strconv.Atoi(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
+	if err != nil {
+		log.Fatal("could not convert home wins to int")
+	}
+	homeTeamLosses, err := strconv.Atoi(b.BasicGameDataNode.HomeTeamInfo.SeriesLosses)
+	if err != nil {
+		log.Fatal("could not convert home losses to int")
+	}
+
+	if homeTeamWins+homeTeamLosses >= currentGameNumber {
+		log.Println("regular season records already updated")
 		return
 	}
 
@@ -912,11 +927,6 @@ func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
 	decodeErr := json.NewDecoder(response.Body).Decode(&boxscoreResult)
 	if decodeErr != nil {
 		log.Fatal(decodeErr)
-	}
-	if boxscoreResult.GameEnded() {
-		log.Println("updating series record")
-		boxscoreResult.UpdateTeamsPlayoffsSeriesRecords()
-		boxscoreResult.UpdateTeamsRegularSeasonRecords()
 	}
 	return boxscoreResult
 }

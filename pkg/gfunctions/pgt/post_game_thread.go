@@ -37,6 +37,14 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
 		if boxscore.GameEnded() {
 			log.Println("game ended")
+			// the nba api sometimes has not updated the record for the teams right at the end of games
+			// see apis/nba/boxscore.go::UpdateTeamsRegularSeasonRecords
+			currentGameNumber, foundCurrentGame := scheduledGames.CurrentGameNumber(todaysGame.GameID, todaysGame.SeasonStage)
+			if foundCurrentGame {
+				log.Println("updating records")
+				boxscore.UpdateTeamsRegularSeasonRecords(currentGameNumber)
+				boxscore.UpdateTeamsPlayoffsSeriesRecords()
+			}
 			if todaysGameScoreboard.EndTimeUTC != "" {
 				gameEndTimeUTC, err := time.Parse(nba.UTCFormat, todaysGameScoreboard.EndTimeUTC)
 				if err != nil {
