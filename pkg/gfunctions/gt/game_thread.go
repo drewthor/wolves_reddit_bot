@@ -29,7 +29,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		log.Println("failed to find team with TriCode: " + teamTriCode)
 		return
 	}
-	scheduledGames := nba.GetScheduledGamesByStartDate(dailyAPIPaths.TeamSchedule, team.ID)
+	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, team.ID)
 	todaysGame, gameToday := scheduledGames[currentDateWestern]
 
 	if gameToday {
