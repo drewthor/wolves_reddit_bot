@@ -160,11 +160,11 @@ func (b *Boxscore) UpdateTeamsRegularSeasonRecords(currentGameNumber int) {
 		return
 	}
 
-	homeTeamWins, err := strconv.Atoi(b.BasicGameDataNode.HomeTeamInfo.SeriesWins)
+	homeTeamWins, err := strconv.Atoi(b.BasicGameDataNode.HomeTeamInfo.Wins)
 	if err != nil {
 		log.Fatal("could not convert home wins to int")
 	}
-	homeTeamLosses, err := strconv.Atoi(b.BasicGameDataNode.HomeTeamInfo.SeriesLosses)
+	homeTeamLosses, err := strconv.Atoi(b.BasicGameDataNode.HomeTeamInfo.Losses)
 	if err != nil {
 		log.Fatal("could not convert home losses to int")
 	}

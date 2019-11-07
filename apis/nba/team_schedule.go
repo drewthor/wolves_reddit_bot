@@ -102,8 +102,8 @@ func (b byStartDate) Swap(i, j int) {
 }
 
 func (b byStartDate) Less(i, j int) bool {
-	firstTime := makeGoTimeFromAPIData("1200" /*startTimeEastern*/, b[i].StartDateEastern)
-	secondTime := makeGoTimeFromAPIData("1200" /*startTimeEastern*/, b[j].StartDateEastern)
+	firstTime := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[i].StartDateEastern)
+	secondTime := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[j].StartDateEastern)
 	return firstTime.Before(secondTime)
 }
 
