@@ -368,11 +368,44 @@ func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDat
 }
 
 func getTeamQuarterScoreTableString(homeTeamBoxscoreInfo TeamBoxscoreInfo, homeTeamStats TeamStats, awayTeamBoxscoreInfo TeamBoxscoreInfo, awayTeamStats TeamStats) string {
-	quarterScoreTableString := ""
-	quarterScoreTableString += "||**Q1**|**Q2**|**Q3**|**Q4**|**Total**|\n"
-	quarterScoreTableString += "|:-:|:-:|:-:|:-:|:-:|:-:|\n"
-	quarterScoreTableString += fmt.Sprintf("|%s|%s|%s|%s|%s|%s|\n", homeTeamBoxscoreInfo.TriCode, homeTeamBoxscoreInfo.PointsByQuarter[0].Points, homeTeamBoxscoreInfo.PointsByQuarter[1].Points, homeTeamBoxscoreInfo.PointsByQuarter[2].Points, homeTeamBoxscoreInfo.PointsByQuarter[3].Points, homeTeamStats.Points)
-	quarterScoreTableString += fmt.Sprintf("|%s|%s|%s|%s|%s|%s|\n", awayTeamBoxscoreInfo.TriCode, awayTeamBoxscoreInfo.PointsByQuarter[0].Points, awayTeamBoxscoreInfo.PointsByQuarter[1].Points, awayTeamBoxscoreInfo.PointsByQuarter[2].Points, awayTeamBoxscoreInfo.PointsByQuarter[3].Points, awayTeamStats.Points)
+	if len(homeTeamBoxscoreInfo.PointsByQuarter) != len(awayTeamBoxscoreInfo.PointsByQuarter) {
+		log.Fatal("Home team and away team line scores are different lengths")
+	}
+
+	quarterScoreTableString := "||"
+	// format for team tricode
+	quarterScoreTableFormatString := "|:-:|"
+	homeTeamLinescoreString := fmt.Sprintf("|%s|", homeTeamBoxscoreInfo.TriCode)
+	awayTeamLinescoreString := fmt.Sprintf("|%s|", awayTeamBoxscoreInfo.TriCode)
+	for i := 1; i <= len(homeTeamBoxscoreInfo.PointsByQuarter); i++ {
+		if i < 5 {
+			// regular time quarter
+			quarterScoreTableString += fmt.Sprintf("**Q%d**|", i)
+		} else {
+			// overtime quarter
+			quarterScoreTableString += fmt.Sprintf("**%dOT**|", i-4)
+		}
+
+		// quarter score format
+		quarterScoreTableFormatString += ":-:|"
+
+		homeTeamLinescoreString += fmt.Sprintf("%s|", homeTeamBoxscoreInfo.PointsByQuarter[i-1].Points)
+		awayTeamLinescoreString += fmt.Sprintf("%s|", awayTeamBoxscoreInfo.PointsByQuarter[i-1].Points)
+	}
+	homeTeamLinescoreString += fmt.Sprintf("%s|", homeTeamStats.Points)
+	homeTeamLinescoreString += "\n"
+	awayTeamLinescoreString += fmt.Sprintf("%s|", awayTeamStats.Points)
+	awayTeamLinescoreString += "\n"
+
+	// total score format
+	quarterScoreTableFormatString += ":-:|"
+	quarterScoreTableFormatString += "\n"
+
+	quarterScoreTableString += "**Total**|\n"
+	quarterScoreTableString += quarterScoreTableFormatString
+	quarterScoreTableString += homeTeamLinescoreString
+	quarterScoreTableString += awayTeamLinescoreString
+
 	return quarterScoreTableString
 }
 
