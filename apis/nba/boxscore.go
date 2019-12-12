@@ -156,9 +156,10 @@ func (b *Boxscore) UpdateTeamsRegularSeasonRecords(currentGameNumber int) {
 	// isGameActivated might be the trigger/think to look at for if the series has been updated see https://github.com/f1uk3r/Some-Python-Scripts/blob/master/reddit-nba-bot/reddit-boxscore-bot.py
 	// update: this does not appear to be reliable either
 	// update 10/30/2019: the nba appears to be updating records in time
-	if !b.BasicGameDataNode.GameIsActivated {
+	// update 12/11/2019: the nba appears to be updating some records in time but it's not consistent; removing this check so that we rely on updating vs what game of the season it is always
+	/*if !b.BasicGameDataNode.GameIsActivated {
 		return
-	}
+	}*/
 
 	homeTeamWins, err := strconv.Atoi(b.BasicGameDataNode.HomeTeamInfo.Wins)
 	if err != nil {
