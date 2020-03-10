@@ -152,5 +152,6 @@ func (s *ScheduledGames) CurrentGameNumber(gameID string, stage seasonStage) (in
 		break
 	}
 	// game not found
+	log.Println(fmt.Printf("failed to find current game number gameID: %s stage: %v ", gameID, stage))
 	return -1, false
 }

@@ -63,7 +63,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			datastore.SaveTeamGameEvent(gameEvent)
 		}
 
-		if exists && gameEvent.GameThread && gameEvent.PostGameThread {
+		if exists && gameEvent.GameThread && gameEvent.PostGameThread && !gameEvent.GameThreadComplete {
 			log.Println("adding post game thread link to game thread")
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
@@ -71,6 +71,8 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			postGameThreadURL := thingURLMapping[gameEvent.PostGameThreadRedditPostFullname]
 			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), postGameThreadURL)
 			redditClient.UpdateUserText(gameEvent.GameThreadRedditPostFullname, content)
+			gameEvent.GameThreadComplete = true
+			datastore.SaveTeamGameEvent(gameEvent)
 		}
 	}
 }

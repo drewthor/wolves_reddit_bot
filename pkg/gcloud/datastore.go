@@ -37,6 +37,7 @@ type TeamGameEvent struct {
 	TeamID                           string
 	PreGameThread                    bool
 	GameThread                       bool
+	GameThreadComplete               bool
 	GameThreadRedditPostFullname     string
 	PostGameThread                   bool
 	PostGameThreadRedditPostFullname string

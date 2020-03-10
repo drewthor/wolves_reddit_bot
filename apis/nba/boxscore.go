@@ -47,6 +47,17 @@ type Boxscore struct {
 		RefereeNode struct {
 			Referees []RefereeInfo `json:"formatted"`
 		} `json:"officials"`
+
+		WatchNode struct {
+			BroadcastNode struct {
+				BroadcastersNode struct {
+					HomeTeamVideoFeeds []VideoBroadcasterInfo `json:"hTeam"`
+					AwayTeamVideoFeeds []VideoBroadcasterInfo `json:"vTeam"`
+					NationalVideoFeeds []VideoBroadcasterInfo `json:"national"`
+				} `json:"broadcasters"`
+				VideoBroadcastInfo GameVideoBroadcastInfo `json:"video"`
+			} `json:"broadcast"`
+		} `json:"watch"`
 	} `json:"basicGameData"`
 }
 
@@ -503,9 +514,56 @@ func getRefereeTableString(refereesInfo []RefereeInfo) string {
 	return refereeTableString
 }
 
+func getBroadcastInfoTable(gameVideoBroadcastInfo GameVideoBroadcastInfo, nationalVideoFeeds []VideoBroadcasterInfo, homeTeamTriCode TriCode, homeTeamVideoFeeds []VideoBroadcasterInfo, awayTeamTriCode TriCode, awayTeamVideoFeeds []VideoBroadcasterInfo) string {
+	broadcastInfoTable := ""
+
+	broadcastInfoTable += "||**Feeds**|"
+	broadcastInfoTable += "\n"
+
+	broadcastInfoTable += "|**National**| "
+
+	nationalFeedStrs := []string{}
+
+	if gameVideoBroadcastInfo.LeaguePass {
+		nationalFeedStrs = append(nationalFeedStrs, "League Pass")
+	}
+
+	for _, nationalVideoFeed := range nationalVideoFeeds {
+		nationalFeedStrs = append(nationalFeedStrs, nationalVideoFeed.LongName)
+	}
+
+	broadcastInfoTable += strings.Join(nationalFeedStrs, " ") + " |"
+	broadcastInfoTable += "\n"
+
+	broadcastInfoTable += fmt.Sprintf("|**%s**| ", homeTeamTriCode)
+
+	homeTeamFeedsStrs := []string{}
+
+	for _, homeTeamVideoFeed := range homeTeamVideoFeeds {
+		homeTeamFeedsStrs = append(homeTeamFeedsStrs, homeTeamVideoFeed.LongName)
+	}
+
+	broadcastInfoTable += strings.Join(homeTeamFeedsStrs, " ") + " |"
+	broadcastInfoTable += "\n"
+
+	broadcastInfoTable += fmt.Sprintf("|**%s**| ", awayTeamTriCode)
+
+	awayTeamFeedsStrs := []string{}
+
+	for _, awayTeamVideoFeed := range awayTeamVideoFeeds {
+		awayTeamFeedsStrs = append(awayTeamFeedsStrs, awayTeamVideoFeed.LongName)
+	}
+
+	broadcastInfoTable += strings.Join(awayTeamFeedsStrs, " ") + " |"
+
+	return broadcastInfoTable
+}
+
 func (b *Boxscore) GetRedditPostGameThreadBodyString(players map[string]Player, gameThreadURL string) string {
 	body := ""
 	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance, false /*gameThread*/, gameThreadURL)
+	body += "\n"
+	body += getBroadcastInfoTable(b.BasicGameDataNode.WatchNode.BroadcastNode.VideoBroadcastInfo, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.NationalVideoFeeds, b.BasicGameDataNode.HomeTeamInfo.TriCode, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.HomeTeamVideoFeeds, b.BasicGameDataNode.AwayTeamInfo.TriCode, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.AwayTeamVideoFeeds)
 	body += "\n"
 	body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
 	body += "\n"
@@ -702,6 +760,8 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, postGameThreadURL string) string {
 	body := ""
 	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance, true /*gameThread*/, postGameThreadURL)
+	body += "\n"
+	body += getBroadcastInfoTable(b.BasicGameDataNode.WatchNode.BroadcastNode.VideoBroadcastInfo, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.NationalVideoFeeds, b.BasicGameDataNode.HomeTeamInfo.TriCode, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.HomeTeamVideoFeeds, b.BasicGameDataNode.AwayTeamInfo.TriCode, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.AwayTeamVideoFeeds)
 	body += "\n"
 
 	if b.StatsNode != nil {
@@ -940,6 +1000,15 @@ type ArenaInfo struct {
 
 type RefereeInfo struct {
 	FullName string `json:"firstNameLastName"`
+}
+
+type VideoBroadcasterInfo struct {
+	ShortName string `json:"shortName"`
+	LongName  string `json:"longName"`
+}
+
+type GameVideoBroadcastInfo struct {
+	LeaguePass bool `json:"isLeaguePass"`
 }
 
 func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {

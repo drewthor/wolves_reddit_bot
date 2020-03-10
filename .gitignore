@@ -21,3 +21,6 @@ gcp.config
 #Google cloud platform
 .gcloudignore
 .env.yaml
+
+#Intellij
+*.idea/
