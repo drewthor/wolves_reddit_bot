@@ -5,6 +5,7 @@ go 1.11
 require (
 	cloud.google.com/go v0.46.2 // indirect
 	cloud.google.com/go/datastore v1.0.0
+	github.com/go-chi/chi v1.5.1
 	github.com/google/go-cmp v0.3.1 // indirect
 	go.opencensus.io v0.22.1 // indirect
 	golang.org/dl v0.0.0-20191017231735-20061d63e9c1 // indirect

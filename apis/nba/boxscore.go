@@ -904,6 +904,7 @@ type TeamBoxscoreInfo struct {
 	Losses          string  `json:"loss"`
 	SeriesWins      string  `json:"seriesWin"`
 	SeriesLosses    string  `json:"seriesLoss"`
+	Points          string  `json:"score"`
 	PointsByQuarter []struct {
 		Points string `json:"score"`
 	} `json:"linescore"`
@@ -1011,9 +1012,9 @@ type GameVideoBroadcastInfo struct {
 	LeaguePass bool `json:"isLeaguePass"`
 }
 
-func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
+func GetBoxscore(boxscoreAPIPath, gameDate string, gameID string) Boxscore {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + boxscoreAPIPath)
-	url := fmt.Sprintf(templateURI, todaysDate, gameID)
+	url := fmt.Sprintf(templateURI, gameDate, gameID)
 	log.Println(url)
 	response, httpErr := http.Get(url)
 

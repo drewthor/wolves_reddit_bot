@@ -14,12 +14,14 @@ type Scoreboard struct {
 }
 
 type GameScoreboard struct {
-	Active       bool         `json:"isGameActivated"`
-	GameDuration GameDuration `json:"gameDuration"`
-	ID           string       `json:"gameId"`
-	Period       Period       `json:"period"`
-	StartTimeUTC string       `json:"startTimeUTC"`
-	EndTimeUTC   string       `json:"endTimeUTC,omitempty"`
+	Active       bool             `json:"isGameActivated"`
+	GameDuration GameDuration     `json:"gameDuration"`
+	ID           string           `json:"gameId"`
+	Period       Period           `json:"period"`
+	StartTimeUTC string           `json:"startTimeUTC"`
+	EndTimeUTC   string           `json:"endTimeUTC,omitempty"`
+	HomeTeamInfo TeamBoxscoreInfo `json:"hTeam"`
+	AwayTeamInfo TeamBoxscoreInfo `json:"vTeam"`
 }
 
 type GameDuration struct {
@@ -57,4 +59,27 @@ func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) Game
 	}
 	log.Fatal("Game not found")
 	return GameScoreboard{}
+}
+
+func GetGameScoreboards(gameDate string) Scoreboard {
+	gameScoreboardAPIPath := GetDailyAPIPaths().Scoreboard
+	templateURI := makeURIFormattable(nbaAPIBaseURI + gameScoreboardAPIPath)
+	url := fmt.Sprintf(templateURI, gameDate)
+	log.Println(url)
+	response, httpErr := http.Get(url)
+
+	defer func() {
+		response.Body.Close()
+		io.Copy(ioutil.Discard, response.Body)
+	}()
+
+	if httpErr != nil {
+		log.Fatal(httpErr)
+	}
+	scoreboardResult := Scoreboard{}
+	decodeErr := json.NewDecoder(response.Body).Decode(&scoreboardResult)
+	if decodeErr != nil {
+		log.Fatal(decodeErr)
+	}
+	return scoreboardResult
 }

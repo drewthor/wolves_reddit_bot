@@ -13,8 +13,6 @@ import (
 func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	defer wg.Done()
 	currentTimeUTC := time.Now().UTC()
-	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
-	// when the eastern time rolls over into the next day
 	westCoastLocation, locationError := time.LoadLocation("America/Los_Angeles")
 	if locationError != nil {
 		log.Fatal(locationError)
@@ -62,7 +60,7 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
 			log.Println("authorized")
-			subreddit := "Timberwolves"
+			subreddit := "SeattleSockeye"
 			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.GameThreadRedditPostFullname}, subreddit)
 			gameThreadURL := thingURLMapping[gameEvent.GameThreadRedditPostFullname]

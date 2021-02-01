@@ -37,7 +37,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
 		datastore := new(gcloud.Datastore)
 		gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
-		subreddit := "Timberwolves"
+		subreddit := "SeattleSockeye"
 
 		if (boxscore.DurationUntilGameStarts().Hours() < 1) && !boxscore.GameEnded() {
 			log.Println("game in progress")
