@@ -15,13 +15,27 @@ type Players struct {
 }
 
 type Player struct {
-	ID        string `json:"personId"`
-	TeamID    string `json:"teamId"`
-	FirstName string `json:"firstName"`
-	LastName  string `json:"lastName"`
+	ID              string `json:"personId"`
+	TeamID          string `json:"teamId"`
+	FirstName       string `json:"firstName"`
+	LastName        string `json:"lastName"`
+	Jersey          string `json:"jersey"`
+	CurrentlyInNBA  bool   `json:"isActive"`
+	Position        string `json:"pos"`
+	HeightFeet      string `json:"heightFeet"`
+	HeightInches    string `json:"heightInches"`
+	HeightMeters    string `json:"heightMeters"`
+	WeightPounds    string `json:"weightPounds"`
+	WeightKilograms string `json:"weightKilograms"`
+	DateOfBirthUTC  string `json:"dateOfBirthUTC"` // this is in format yyyy-mm-dd (nba.TimeBirthdateFormat)
+	NBADebutYear    string `json:"nbaDebutYear"`
+	YearsPro        string `json:"yearsPro"`
+	CollegeName     string `json:"collegeName"`
+	LastAffiliation string `json:"lastAffiliation"`
+	Country         string `json:"country"`
 }
 
-func GetPlayers(playersAPIPath string) map[string]Player {
+func GetPlayers(playersAPIPath string) ([]Player, error) {
 	url := makeURIFormattable(nbaAPIBaseURI + playersAPIPath)
 	response, httpErr := http.Get(url)
 
@@ -37,11 +51,9 @@ func GetPlayers(playersAPIPath string) map[string]Player {
 	playersResult := Players{}
 	decodeErr := json.NewDecoder(response.Body).Decode(&playersResult)
 	if decodeErr != nil {
-		log.Fatal(decodeErr)
+		log.Println(decodeErr)
+		return nil, decodeErr
 	}
-	playerMap := map[string]Player{}
-	for _, player := range playersResult.LeagueNode.Players {
-		playerMap[player.ID] = player
-	}
-	return playerMap
+
+	return playersResult.LeagueNode.Players, nil
 }

@@ -1,0 +1,286 @@
+{
+  "_internal": {
+    "pubDateTime": "2021-07-03 06:00:36.267 EDT",
+    "igorPath": "cron,1625306426715,1625306426715|router,1625306426715,1625306426862|domUpdater,1625306426948,1625306435742|feedProducer,1625306435847,1625306438140",
+    "routeName": "CronJob::0600",
+    "routeValue": "CronJob::0600",
+    "xslt": "NBA/xsl/date/scoreboard/marty_daily_scoreboard.xsl",
+    "xsltForceRecompile": "true",
+    "xsltInCache": "false",
+    "xsltCompileTimeMillis": "355",
+    "xsltTransformTimeMillis": "183",
+    "consolidatedDomKey": "prod__transform__marty_daily_scoreboard__3552150715083",
+    "endToEndTimeMillis": "11425"
+  },
+  "numGames": 1,
+  "games": [
+    {
+      "seasonStageId": 4,
+      "seasonYear": "2020",
+      "leagueName": "standard",
+      "gameId": "0042000306",
+      "arena": {
+        "name": "State Farm Arena",
+        "isDomestic": true,
+        "city": "Atlanta",
+        "stateAbbr": "GA",
+        "country": "USA"
+      },
+      "isGameActivated": false,
+      "statusNum": 1,
+      "extendedStatusNum": 0,
+      "startTimeEastern": "8:30 PM ET",
+      "startTimeUTC": "2021-07-04T00:30:00.000Z",
+      "startDateEastern": "20210703",
+      "homeStartDate": "20210703",
+      "homeStartTime": "2030",
+      "visitorStartDate": "20210703",
+      "visitorStartTime": "1930",
+      "gameUrlCode": "20210703/MILATL",
+      "clock": "",
+      "isBuzzerBeater": false,
+      "isPreviewArticleAvail": true,
+      "isRecapArticleAvail": false,
+      "nugget": {
+        "text": ""
+      },
+      "attendance": "",
+      "tickets": {
+        "mobileApp": "https://a.data.nba.com/tickets/single/2020/0042000306/APP_TIX",
+        "desktopWeb": "https://a.data.nba.com/tickets/single/2020/0042000306/TEAM_SCH",
+        "mobileWeb": "https://a.data.nba.com/tickets/single/2020/0042000306/WEB_MWEB",
+        "leagGameInfo": "https://a.data.nba.com/tickets/single/2020/0042000306/LEAG_GAMEINFO",
+        "leagTix": "https://a.data.nba.com/tickets/single/2020/0042000306/LEAG_TIX"
+      },
+      "hasGameBookPdf": false,
+      "isStartTimeTBD": false,
+      "isNeutralVenue": false,
+      "gameDuration": {
+        "hours": "",
+        "minutes": ""
+      },
+      "tags": [
+        "E32020"
+      ],
+      "playoffs": {
+        "roundNum": "3",
+        "confName": "East",
+        "seriesId": "31",
+        "seriesSummaryText": "MIL leads 3-2",
+        "isSeriesCompleted": false,
+        "gameNumInSeries": "6",
+        "isIfNecessary": false,
+        "vTeam": {
+          "seedNum": "3",
+          "seriesWin": "3",
+          "isSeriesWinner": false
+        },
+        "hTeam": {
+          "seedNum": "5",
+          "seriesWin": "2",
+          "isSeriesWinner": false
+        }
+      },
+      "period": {
+        "current": 0,
+        "type": 0,
+        "maxRegular": 4,
+        "isHalftime": false,
+        "isEndOfPeriod": false
+      },
+      "vTeam": {
+        "teamId": "1610612749",
+        "triCode": "MIL",
+        "win": "46",
+        "loss": "26",
+        "seriesWin": "2",
+        "seriesLoss": "1",
+        "score": "",
+        "linescore": []
+      },
+      "hTeam": {
+        "teamId": "1610612737",
+        "triCode": "ATL",
+        "win": "41",
+        "loss": "31",
+        "seriesWin": "1",
+        "seriesLoss": "2",
+        "score": "",
+        "linescore": []
+      },
+      "watch": {
+        "broadcast": {
+          "broadcasters": {
+            "national": [
+              {
+                "shortName": "TNT",
+                "longName": "TNT"
+              },
+              {
+                "shortName": "TNTOT",
+                "longName": "TNT OT"
+              }
+            ],
+            "canadian": [
+              {
+                "shortName": "TSN1/4",
+                "longName": "TSN1/4"
+              }
+            ],
+            "vTeam": [],
+            "hTeam": [],
+            "spanish_hTeam": [],
+            "spanish_vTeam": [],
+            "spanish_national": []
+          },
+          "video": {
+            "regionalBlackoutCodes": "tarr",
+            "canPurchase": false,
+            "isLeaguePass": true,
+            "isNationalBlackout": true,
+            "isTNTOT": false,
+            "isVR": false,
+            "tntotIsOnAir": false,
+            "isNextVR": false,
+            "isNBAOnTNTVR": false,
+            "isMagicLeap": false,
+            "isOculusVenues": false,
+            "streams": [
+              {
+                "streamType": "vTeam",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              },
+              {
+                "streamType": "hTeam",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              },
+              {
+                "streamType": "espanol_vTeam",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              },
+              {
+                "streamType": "espanol_hTeam",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              },
+              {
+                "streamType": "espanol_natl",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              },
+              {
+                "streamType": "mobile",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              },
+              {
+                "streamType": "condensed",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              },
+              {
+                "streamType": "alt",
+                "isOnAir": false,
+                "doesArchiveExist": false,
+                "isArchiveAvailToWatch": false,
+                "streamId": "",
+                "duration": 0
+              }
+            ],
+            "deepLink": [
+              {
+                "broadcaster": "TNT",
+                "regionalMarketCodes": "",
+                "iosApp": "https://tnt.app.link/7w91Bdy0NV",
+                "androidApp": "https://tnt.app.link/7w91Bdy0NV",
+                "desktopWeb": "https://tnt.app.link/7w91Bdy0NV",
+                "mobileWeb": "https://tnt.app.link/7w91Bdy0NV"
+              }
+            ]
+          },
+          "audio": {
+            "national": {
+              "streams": [
+                {
+                  "language": "English",
+                  "isOnAir": false,
+                  "streamId": ""
+                },
+                {
+                  "language": "Spanish",
+                  "isOnAir": false,
+                  "streamId": ""
+                }
+              ],
+              "broadcasters": []
+            },
+            "vTeam": {
+              "streams": [
+                {
+                  "language": "English",
+                  "isOnAir": false,
+                  "streamId": ""
+                },
+                {
+                  "language": "Spanish",
+                  "isOnAir": false,
+                  "streamId": ""
+                }
+              ],
+              "broadcasters": [
+                {
+                  "shortName": "620 AM/103.3 FM WTMJ",
+                  "longName": "620 AM/103.3 FM WTMJ"
+                }
+              ]
+            },
+            "hTeam": {
+              "streams": [
+                {
+                  "language": "English",
+                  "isOnAir": false,
+                  "streamId": ""
+                },
+                {
+                  "language": "Spanish",
+                  "isOnAir": false,
+                  "streamId": ""
+                }
+              ],
+              "broadcasters": [
+                {
+                  "shortName": "WZGC 92.9 FM The Game",
+                  "longName": "WZGC 92.9 FM The Game"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

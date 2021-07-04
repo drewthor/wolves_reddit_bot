@@ -581,7 +581,7 @@ func (b *Boxscore) GetRedditPostGameThreadBodyString(players map[string]Player, 
 	return body
 }
 
-func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
+func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams []Team) string {
 	title := ""
 	firstTeam := Team{}
 	firstTeamStats := TeamStats{}
@@ -592,10 +592,10 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 	secondTeamInfo := TeamBoxscoreInfo{}
 	secondTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
-		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
 		firstTeamStats = b.StatsNode.HomeTeamNode.TeamStats
 		firstTeamInfo = b.BasicGameDataNode.HomeTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
 		secondTeamStats = b.StatsNode.AwayTeamNode.TeamStats
 		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
 
@@ -604,10 +604,10 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
 		}
 	} else {
-		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
 		firstTeamStats = b.StatsNode.AwayTeamNode.TeamStats
 		firstTeamInfo = b.BasicGameDataNode.AwayTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
 		secondTeamStats = b.StatsNode.HomeTeamNode.TeamStats
 		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
 
@@ -785,7 +785,17 @@ func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, post
 	return body
 }
 
-func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
+func findTeamWithTricode(tricode TriCode, teams []Team) Team {
+	for _, t := range teams {
+		if t.TriCode == tricode {
+			return t
+		}
+	}
+	log.Println("cannot find team in teams slice with tricode: " + tricode)
+	return Team{}
+}
+
+func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams []Team) string {
 	title := ""
 	firstTeam := Team{}
 	firstTeamInfo := TeamBoxscoreInfo{}
@@ -794,9 +804,9 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 	secondTeamInfo := TeamBoxscoreInfo{}
 	secondTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
-		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
 		firstTeamInfo = b.BasicGameDataNode.HomeTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
 		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
 
 		if b.IsPlayoffGame() {
@@ -804,9 +814,9 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
 		}
 	} else {
-		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
 		firstTeamInfo = b.BasicGameDataNode.AwayTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
 		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
 
 		if b.IsPlayoffGame() {

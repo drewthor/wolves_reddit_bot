@@ -24,8 +24,13 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	log.Println(currentDateWestern)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	team, foundTeam := teams[teamTriCode]
-	if !foundTeam {
+	var team *nba.Team
+	for _, t := range teams {
+		if t.TriCode == teamTriCode {
+			team = &t
+		}
+	}
+	if team == nil {
 		log.Println("failed to find team with TriCode: " + teamTriCode)
 		return
 	}
@@ -47,7 +52,15 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient.Authorize()
 			log.Println("authorized")
 			title := boxscore.GetRedditGameThreadTitle(teamTriCode, teams)
-			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), "" /*postGameThreadURL*/)
+			players, err := nba.GetPlayers(dailyAPIPaths.Players)
+			if err != nil {
+				log.Fatal(err)
+			}
+			playersMap := map[string]nba.Player{}
+			for _, player := range players {
+				playersMap[player.ID] = player
+			}
+			content := boxscore.GetRedditGameThreadBodyString(playersMap, "" /*postGameThreadURL*/)
 
 			if exists && gameEvent.GameThread {
 				log.Println("updating post")
@@ -69,7 +82,15 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient.Authorize()
 			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.PostGameThreadRedditPostFullname}, subreddit)
 			postGameThreadURL := thingURLMapping[gameEvent.PostGameThreadRedditPostFullname]
-			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), postGameThreadURL)
+			players, err := nba.GetPlayers(dailyAPIPaths.Players)
+			if err != nil {
+				log.Fatal(err)
+			}
+			playersMap := map[string]nba.Player{}
+			for _, player := range players {
+				playersMap[player.ID] = player
+			}
+			content := boxscore.GetRedditGameThreadBodyString(playersMap, postGameThreadURL)
 			redditClient.UpdateUserText(gameEvent.GameThreadRedditPostFullname, content)
 			gameEvent.GameThreadComplete = true
 			datastore.SaveTeamGameEvent(gameEvent)

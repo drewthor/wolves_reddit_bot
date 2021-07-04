@@ -65,10 +65,10 @@ func (c *Client) loadConfiguration(file string) {
 	configFile, err := os.Open(file)
 	defer configFile.Close()
 	if err != nil {
-		c.userConfig.Username = os.Getenv("username")
-		c.userConfig.Password = os.Getenv("password")
-		c.userConfig.ClientID = os.Getenv("clientID")
-		c.userConfig.ClientSecret = os.Getenv("clientSecret")
+		c.userConfig.Username = os.Getenv("redditUsername")
+		c.userConfig.Password = os.Getenv("redditPassword")
+		c.userConfig.ClientID = os.Getenv("redditClientID")
+		c.userConfig.ClientSecret = os.Getenv("redditClientSecret")
 	} else {
 		decodeErr := json.NewDecoder(configFile).Decode(&c.userConfig)
 		if decodeErr != nil {

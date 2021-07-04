@@ -1,4 +1,4 @@
-package resources
+package controller
 
 import (
 	"net/http"
@@ -7,22 +7,22 @@ import (
 
 	"github.com/drewthor/wolves_reddit_bot/util"
 
-	"github.com/drewthor/wolves_reddit_bot/services"
+	"github.com/drewthor/wolves_reddit_bot/service"
 )
 
-type BoxscoreResource struct {
-	BoxscoreService *services.BoxscoreService
+type BoxscoreController struct {
+	BoxscoreService *service.BoxscoreService
 }
 
-func (br BoxscoreResource) Routes() chi.Router {
+func (bc BoxscoreController) Routes() chi.Router {
 	r := chi.NewRouter()
 
-	r.Get("/", br.Get)
+	r.Get("/", bc.Get)
 
 	return r
 }
 
-func (br BoxscoreResource) Get(w http.ResponseWriter, r *http.Request) {
+func (bc BoxscoreController) Get(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	gameID := chi.URLParam(r, "gameID")
 	gameDate := r.FormValue("game_date")
@@ -37,5 +37,5 @@ func (br BoxscoreResource) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	util.WriteJSON(http.StatusOK, br.BoxscoreService.Get(gameID, gameDate), w)
+	util.WriteJSON(http.StatusOK, bc.BoxscoreService.Get(gameID, gameDate), w)
 }

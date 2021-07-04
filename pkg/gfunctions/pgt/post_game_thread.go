@@ -21,8 +21,13 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
 	dailyAPIPaths := nba.GetDailyAPIPaths()
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	team, foundTeam := teams[teamTriCode]
-	if !foundTeam {
+	var team *nba.Team
+	for _, t := range teams {
+		if t.TriCode == teamTriCode {
+			team = &t
+		}
+	}
+	if team == nil {
 		log.Println("failed to find team with TriCode: " + teamTriCode)
 		return
 	}
@@ -64,7 +69,15 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.GameThreadRedditPostFullname}, subreddit)
 			gameThreadURL := thingURLMapping[gameEvent.GameThreadRedditPostFullname]
-			content := boxscore.GetRedditPostGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), gameThreadURL)
+			players, err := nba.GetPlayers(dailyAPIPaths.Players)
+			if err != nil {
+				log.Fatal(err)
+			}
+			playersMap := map[string]nba.Player{}
+			for _, player := range players {
+				playersMap[player.ID] = player
+			}
+			content := boxscore.GetRedditPostGameThreadBodyString(playersMap, gameThreadURL)
 			submitResponse := redditClient.SubmitNewPost(subreddit, title, content)
 			gameEvent.PostGameThreadRedditPostFullname = submitResponse.JsonNode.DataNode.Fullname
 
