@@ -7,4 +7,5 @@ const (
 	Regular SeasonStage = 2
 	AllStar SeasonStage = 3
 	Post    SeasonStage = 4
+	PlayIn  SeasonStage = 5
 )

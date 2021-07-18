@@ -24,21 +24,32 @@ type Boxscore struct {
 		PlayersStats []PlayerStats `json:"activePlayers"`
 	} `json:"stats,omitempty"`
 	BasicGameDataNode struct {
+		StatusNum            int               `json:"statusNum"` // 1 - upcoming 2 - started 3 - completed
+		SeasonYear           string            `json:"seasonYear"`
+		GameID               string            `json:"gameId"`
 		Arena                ArenaInfo         `json:"arena"`
 		Attendance           string            `json:"attendance"`
 		Clock                string            `json:"clock"`
 		GameIsActivated      bool              `json:"isGameActivated"` // see UpdateTeamsRegularSeasonRecords
 		GameStartTimeEastern string            `json:"startTimeEastern"`
 		GameStartDateEastern string            `json:"startDateEastern"`
-		GameEndTimeUTC       string            `json:"endTimeUTC,omitempty"`
+		GameStartTimeUTC     time.Time         `json:"startTimeUTC"`
+		GameEndTimeUTC       *time.Time        `json:"endTimeUTC,omitempty"`
 		HomeTeamInfo         TeamBoxscoreInfo  `json:"hTeam"`
 		AwayTeamInfo         TeamBoxscoreInfo  `json:"vTeam"`
 		PlayoffsNode         *PlayoffsGameInfo `json:"playoffs,omitempty"`
 		// season stage IDs
 		// 1: preseason
 		// 2: regular season
-		// 3: playoffs
+		// 3: all star
+		// 4: playoffs
+		// 5: play in
 		SeasonStage seasonStage `json:"seasonStageId"`
+
+		GameDurationNode *struct {
+			Hours   string `json:"hours"`
+			Minutes string `json:"minutes"`
+		} `json:"gameDuration"`
 
 		PeriodNode struct {
 			CurrentPeriod int `json:"current"`
@@ -70,7 +81,7 @@ func (b *Boxscore) GameEnded() bool {
 		// the nba api will post a boxscore without the stats json node for some time before games
 		return false
 	}
-	hasEndTime := b.BasicGameDataNode.GameEndTimeUTC != ""
+	hasEndTime := b.BasicGameDataNode.GameEndTimeUTC != nil
 	if hasEndTime {
 		log.Println("endTimeUTC reported")
 		return true
@@ -1022,25 +1033,26 @@ type GameVideoBroadcastInfo struct {
 	LeaguePass bool `json:"isLeaguePass"`
 }
 
-func GetBoxscore(boxscoreAPIPath, gameDate string, gameID string) Boxscore {
+func GetBoxscore(boxscoreAPIPath, gameDate string, gameID string) (Boxscore, error) {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + boxscoreAPIPath)
 	url := fmt.Sprintf(templateURI, gameDate, gameID)
-	log.Println(url)
-	response, httpErr := http.Get(url)
+	response, err := http.Get(url)
 
 	defer func() {
 		response.Body.Close()
 		io.Copy(ioutil.Discard, response.Body)
 	}()
 
-	if httpErr != nil {
-		log.Fatal(httpErr)
+	if err != nil {
+		log.Println(err)
+		return Boxscore{}, err
 	}
 
 	boxscoreResult := Boxscore{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&boxscoreResult)
-	if decodeErr != nil {
-		log.Fatal(decodeErr)
+	err = json.NewDecoder(response.Body).Decode(&boxscoreResult)
+	if err != nil {
+		log.Println(err)
+		return Boxscore{}, err
 	}
-	return boxscoreResult
+	return boxscoreResult, nil
 }

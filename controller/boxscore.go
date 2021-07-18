@@ -37,5 +37,11 @@ func (bc BoxscoreController) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	util.WriteJSON(http.StatusOK, bc.BoxscoreService.Get(gameID, gameDate), w)
+	boxscore, err := bc.BoxscoreService.Get(gameID, gameDate)
+	if err != nil {
+		util.WriteJSON(http.StatusInternalServerError, err, w)
+		return
+	}
+
+	util.WriteJSON(http.StatusOK, boxscore, w)
 }

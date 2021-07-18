@@ -29,8 +29,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	dbConfig.BeforeConnect = dao.RegisterCustomTypes
-
 	dbpool, err := pgxpool.ConnectConfig(context.Background(), dbConfig)
 	if err != nil {
 		log.Println(os.Stderr, "unable to connect to database: %v\n", err)
@@ -38,9 +36,22 @@ func main() {
 	}
 	defer dbpool.Close()
 
-	r.Mount("/games", controller.GameController{GameService: &service.GameService{}}.Routes())
+	arenaService := &service.ArenaService{ArenaDAO: &dao.ArenaDAO{DB: dbpool}}
+	gameRefereeService := &service.GameRefereeService{GameRefereeDAO: &dao.GameRefereeDAO{DB: dbpool}}
+	refereeService := &service.RefereeService{RefereeDAO: &dao.RefereeDAO{DB: dbpool}}
+	seasonStageService := &service.SeasonStageService{}
+	teamService := &service.TeamService{TeamDAO: &dao.TeamDAO{DB: dbpool}}
+	gameService := &service.GameService{
+		GameDAO:            &dao.GameDAO{DB: dbpool},
+		ArenaService:       arenaService,
+		GameRefereeService: gameRefereeService,
+		RefereeService:     refereeService,
+		SeasonStageService: seasonStageService,
+		TeamService:        teamService}
+
+	r.Mount("/games", controller.GameController{GameService: gameService}.Routes())
 	r.Mount("/players", controller.PlayerController{PlayerService: &service.PlayerService{PlayerDAO: &dao.PlayerDAO{DB: dbpool}}}.Routes())
-	r.Mount("/teams", controller.TeamController{TeamService: &service.TeamService{TeamDAO: &dao.TeamDAO{DB: dbpool}}}.Routes())
+	r.Mount("/teams", controller.TeamController{TeamService: teamService}.Routes())
 
 	http.ListenAndServe(":3333", r)
 }

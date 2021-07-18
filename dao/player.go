@@ -106,7 +106,7 @@ func (pd *PlayerDAO) GetAll() ([]api.Player, error) {
 	return players, nil
 }
 
-func (pd *PlayerDAO) GetByIds(ids []string) ([]api.Player, error) {
+func (pd *PlayerDAO) GetByIDs(ids []string) ([]api.Player, error) {
 	query := `
 		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, currently_in_nba, years_pro, nba_debut_year, nba_player_id, country, time_created, time_modified 
 		FROM nba.player p, LATERAL (
@@ -219,7 +219,7 @@ func (pd *PlayerDAO) UpdatePlayers(players []api.Player) ([]api.Player, error) {
 
 	batchResults := tx.SendBatch(context.Background(), bp)
 
-	insertedPlayerIds := []string{}
+	insertedPlayerIDs := []string{}
 	numPlayerPositions := 0
 
 	for _, player := range players {
@@ -229,7 +229,7 @@ func (pd *PlayerDAO) UpdatePlayers(players []api.Player) ([]api.Player, error) {
 			return nil, err
 		}
 
-		insertedPlayerIds = append(insertedPlayerIds, id)
+		insertedPlayerIDs = append(insertedPlayerIDs, id)
 
 		bpp.Queue(removeExistingPlayerPositions, id)
 		for j := range player.Positions {
@@ -262,5 +262,5 @@ func (pd *PlayerDAO) UpdatePlayers(players []api.Player) ([]api.Player, error) {
 		return nil, err
 	}
 
-	return pd.GetByIds(insertedPlayerIds)
+	return pd.GetByIDs(insertedPlayerIDs)
 }

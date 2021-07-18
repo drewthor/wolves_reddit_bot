@@ -34,12 +34,18 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		log.Println("failed to find team with TriCode: " + teamTriCode)
 		return
 	}
-	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, team.ID)
+	scheduledGames, err := nba.GetCurrentTeamSchedule(dailyAPIPaths.TeamSchedule, team.ID)
+	if err != nil {
+		log.Fatal(err)
+	}
 	todaysGame, gameToday := scheduledGames[currentDateWestern]
 
 	if gameToday {
 		log.Println("game today")
-		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		boxscore, err := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		if err != nil {
+			log.Fatal(err)
+		}
 		datastore := new(gcloud.Datastore)
 		gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
 		subreddit := "SeattleSockeye"

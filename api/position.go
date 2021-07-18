@@ -1,9 +1,5 @@
 package api
 
-import (
-	"strings"
-)
-
 type Position string
 
 const (
@@ -32,8 +28,4 @@ func PositionFromNBAPosition(pos string) []string {
 	default:
 		return []string{string(Unknown)}
 	}
-}
-
-func (p *Position) String() string {
-	return strings.ToLower(string(*p))
 }

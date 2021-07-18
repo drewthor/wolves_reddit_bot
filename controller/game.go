@@ -22,6 +22,8 @@ func (gc GameController) Routes() chi.Router {
 		r.Mount("/boxscore", BoxscoreController{BoxscoreService: &service.BoxscoreService{}}.Routes())
 	})
 
+	r.Post("/update", gc.UpdateGames)
+
 	return r
 }
 
@@ -33,6 +35,20 @@ func (gc GameController) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	util.WriteJSON(http.StatusOK, gc.GameService.Get(gameDate), w)
+	games, err := gc.GameService.Get(gameDate)
+	if err != nil {
+		util.WriteJSON(http.StatusInternalServerError, err, w)
+	}
 
+	util.WriteJSON(http.StatusOK, games, w)
+}
+
+func (gc GameController) UpdateGames(w http.ResponseWriter, r *http.Request) {
+	games, err := gc.GameService.UpdateGames()
+
+	if err != nil {
+		util.WriteJSON(http.StatusInternalServerError, err, w)
+	}
+
+	util.WriteJSON(http.StatusOK, games, w)
 }

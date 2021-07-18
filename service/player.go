@@ -30,6 +30,15 @@ func (ps PlayerService) GetAll() ([]api.Player, error) {
 	return players, nil
 }
 
+func (ps PlayerService) UpdatePlayers() ([]api.Player, error) {
+	players, err := ps.getAllPlayersFromNBAApi()
+	if err != nil {
+		return nil, err
+	}
+	updatedPlayers, err := ps.PlayerDAO.UpdatePlayers(players)
+	return updatedPlayers, nil
+}
+
 func (ps PlayerService) getAllPlayersFromNBAApi() ([]api.Player, error) {
 	nbaPlayers, err := nba.GetPlayers(nba.GetDailyAPIPaths().Players)
 
@@ -121,13 +130,4 @@ func (ps PlayerService) getAllPlayersFromNBAApi() ([]api.Player, error) {
 		players = append(players, player)
 	}
 	return players, nil
-}
-
-func (ps PlayerService) UpdatePlayers() ([]api.Player, error) {
-	players, err := ps.getAllPlayersFromNBAApi()
-	if err != nil {
-		return nil, err
-	}
-	updatedPlayers, err := ps.PlayerDAO.UpdatePlayers(players)
-	return updatedPlayers, nil
 }

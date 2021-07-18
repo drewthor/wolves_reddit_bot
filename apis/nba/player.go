@@ -45,7 +45,8 @@ func GetPlayers(playersAPIPath string) ([]Player, error) {
 	}()
 
 	if httpErr != nil {
-		log.Fatal(httpErr)
+		log.Println(httpErr)
+		return nil, httpErr
 	}
 
 	playersResult := Players{}

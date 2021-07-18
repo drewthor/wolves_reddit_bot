@@ -33,6 +33,7 @@ type DailyAPIPaths struct {
 	Scoreboard                string `json:"scoreboard"`               // e.g. "/prod/v2/{{gameDate}}/scoreboard.json"
 	Teams                     string `json:"teams"`                    // e.g. "/prod/v2/2020/teams.json"
 	TeamSchedule              string `json:"teamSchedule"`             // e.g. "/prod/v1/2020/teams/{{teamUrlCode}}/schedule.json"
+	LeagueSchedule            string `json:"leagueSchedule"`           // e.g. "/prod/v1/2020/schedule.json"
 	Coaches                   string `json:"leagueRosterCoaches"`      // e.g. "/prod/v1/2020/coaches.json"
 	TeamHomeICalendarDownload string `json:"teamICS"`                  // e.g. "/prod/teams/schedules/2020/{{teamUrlCode}}_home_schedule.ics"
 	TeamAllICalendarDownload  string `json:"teamICS2"`                 // e.g. "/prod/teams/schedules/2020/{{teamUrlCode}}_schedule.ics"

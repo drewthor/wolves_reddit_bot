@@ -40,6 +40,7 @@ func (ts TeamService) UpdateTeams() ([]api.Team, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return updatedTeams, nil
 }
 
@@ -58,7 +59,7 @@ func (ts TeamService) getAllTeamsFromNBAApi() ([]api.Team, error) {
 			City:          nbaTeam.City,
 			AlternateCity: nbaTeam.AlternateCity,
 			League:        league,
-			Season:        "2020",
+			Season:        CURRENT_SEASON_START_YEAR,
 			Conference:    strings.ToLower(nbaTeam.Conference),
 			Division:      strings.ToLower(nbaTeam.Division),
 			NBAURLName:    nbaTeam.UrlName,
@@ -68,4 +69,14 @@ func (ts TeamService) getAllTeamsFromNBAApi() ([]api.Team, error) {
 	}
 
 	return teams, nil
+}
+
+// get a mapping from nba team id -> db team id
+func (ts TeamService) NBATeamIDMappings() (map[string]string, error) {
+	nbaTeamIDMappings, err := ts.TeamDAO.NBATeamIDMappings()
+	if err != nil {
+		return nil, err
+	}
+
+	return nbaTeamIDMappings, err
 }

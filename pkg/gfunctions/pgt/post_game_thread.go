@@ -31,13 +31,19 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		log.Println("failed to find team with TriCode: " + teamTriCode)
 		return
 	}
-	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, team.ID)
+	scheduledGames, err := nba.GetCurrentTeamSchedule(dailyAPIPaths.TeamSchedule, team.ID)
+	if err != nil {
+		log.Fatal(err)
+	}
 	todaysGame, gameToday := scheduledGames[currentDateWestern]
 	log.Println("checked for game")
 	if gameToday {
 		log.Println("game today")
 		todaysGameScoreboard := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateWestern, todaysGame.GameID)
-		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		boxscore, err := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if boxscore.GameEnded() {
 			log.Println("game ended")
 			// the nba api sometimes has not updated the record for the teams right at the end of games

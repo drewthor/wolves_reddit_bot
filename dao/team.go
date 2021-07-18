@@ -16,28 +16,28 @@ type TeamDAO struct {
 
 func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 	query := `
-		SELECT id, t.name, nickname, city, city_alternate, state, country, league_name, season_name, conference_name, division_name, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
+		SELECT id, t.name, nickname, city, city_alternate, state, country, league.name, season.name, conference.name, division.name, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t, 
 		LATERAL (
 			SELECT l.name
 			FROM nba.league l
 			WHERE l.id = t.league_id
-        ) as league_name,
+        ) league,
 		LATERAL (
 		        SELECT CONCAT(s.start_year, '-', s.end_year)
 				FROM nba.season s
 				WHERE s.id = t.season_id
-		) as season_name,
+		) season,
 		LATERAL (
 		        SELECT c.name
 				FROM nba.conference c
 				WHERE c.id = t.season_id
-        ) as conference_name,
+        ) conference,
 		LATERAL (
 		        SELECT d.name
 				FROM nba.division d
 				WHERE d.id = t.season_id
-        ) as division_name
+        ) division
 		WHERE id = $1`
 
 	team := api.Team{}
@@ -67,7 +67,7 @@ func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 	return team, nil
 }
 
-func (td *TeamDAO) GetByIds(ids []string) ([]api.Team, error) {
+func (td *TeamDAO) GetByIDs(ids []string) ([]api.Team, error) {
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, league.name, season.name, conference.name, division.name, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t, 
@@ -235,7 +235,7 @@ func (td *TeamDAO) UpdateTeams(teams []api.Team) ([]api.Team, error) {
 
 	batchResults := tx.SendBatch(context.Background(), b)
 
-	insertedTeamIds := []string{}
+	insertedTeamIDs := []string{}
 
 	for _ = range teams {
 		id := ""
@@ -244,7 +244,7 @@ func (td *TeamDAO) UpdateTeams(teams []api.Team) ([]api.Team, error) {
 			return nil, err
 		}
 
-		insertedTeamIds = append(insertedTeamIds, id)
+		insertedTeamIDs = append(insertedTeamIDs, id)
 	}
 
 	err = batchResults.Close()
@@ -257,5 +257,30 @@ func (td *TeamDAO) UpdateTeams(teams []api.Team) ([]api.Team, error) {
 		return nil, err
 	}
 
-	return td.GetByIds(insertedTeamIds)
+	return td.GetByIDs(insertedTeamIDs)
+}
+
+func (td *TeamDAO) NBATeamIDMappings() (map[string]string, error) {
+	query := `
+		SELECT id, nba_team_id
+		FROM nba.team t`
+
+	rows, err := td.DB.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	mappings := map[string]string{}
+
+	for rows.Next() {
+		teamID := ""
+		nbaTeamID := ""
+		err = rows.Scan(&teamID, &nbaTeamID)
+		if err != nil {
+			return nil, err
+		}
+		mappings[nbaTeamID] = teamID
+	}
+
+	return mappings, nil
 }
