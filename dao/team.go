@@ -14,6 +14,20 @@ type TeamDAO struct {
 	DB *pgxpool.Pool
 }
 
+type TeamUpdate struct {
+	Name            string
+	Nickname        string
+	City            string
+	AlternateCity   string
+	LeagueName      string
+	SeasonStartYear int
+	ConferenceName  string
+	DivisionName    string
+	NBAURLName      string
+	NBAShortName    string
+	NBATeamID       int
+}
+
 func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, league.name, season.name, conference.name, division.name, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
@@ -189,7 +203,7 @@ func (td *TeamDAO) GetAll() ([]api.Team, error) {
 	return teams, nil
 }
 
-func (td *TeamDAO) UpdateTeams(teams []api.Team) ([]api.Team, error) {
+func (td *TeamDAO) UpdateTeams(teams []TeamUpdate) ([]api.Team, error) {
 	tx, err := td.DB.Begin(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
@@ -224,10 +238,10 @@ func (td *TeamDAO) UpdateTeams(teams []api.Team) ([]api.Team, error) {
 			team.Nickname,
 			team.City,
 			team.AlternateCity,
-			team.League,
-			team.Season,
-			team.Conference,
-			team.Division,
+			team.LeagueName,
+			team.SeasonStartYear,
+			team.ConferenceName,
+			team.DivisionName,
 			team.NBAURLName,
 			team.NBAShortName,
 			team.NBATeamID)

@@ -14,16 +14,17 @@ type GameRefereeDAO struct {
 }
 
 type GameRefereeUpdate struct {
-	NBAGameID string
-	FirstName string
-	LastName  string
+	NBAGameID    string
+	NBARefereeID int
+	Assignment   string
 }
 
 type GameReferee struct {
-	GameID    string
-	RefereeID string
-	CreatedAt time.Time
-	UpdatedAt *time.Time
+	GameID     string
+	RefereeID  string
+	Assignment string
+	CreatedAt  time.Time
+	UpdatedAt  *time.Time
 }
 
 func (grd *GameRefereeDAO) UpdateGameReferees(gameRefereeUpdates []GameRefereeUpdate) ([]GameReferee, error) {
@@ -35,21 +36,22 @@ func (grd *GameRefereeDAO) UpdateGameReferees(gameRefereeUpdates []GameRefereeUp
 
 	insertGameReferee := `
 		INSERT INTO nba.game_referee
-			as gr(game_id, referee_id)
-		VALUES ((SELECT id FROM nba.Game WHERE nba_game_id = $1), (SELECT id FROM nba.Referee WHERE first_name = $2 AND last_name = $3))
+			as gr(game_id, referee_id, assignment)
+		VALUES ((SELECT id FROM nba.Game WHERE nba_game_id = $1), (SELECT id FROM nba.Referee WHERE nba_referee_id = $2), $3)
 		ON CONFLICT (game_id, referee_id) DO UPDATE
 		SET 
 			game_id = coalesce(excluded.game_id, gr.game_id),
-			referee_id = coalesce(excluded.referee_id, gr.referee_id)
-		RETURNING game_id, referee_id, created_at, updated_at`
+			referee_id = coalesce(excluded.referee_id, gr.referee_id),
+			assignment = coalesce(excluded.assignment, gr.assignment)
+		RETURNING game_id, referee_id, assignment, created_at, updated_at`
 
 	bp := &pgx.Batch{}
 
 	for _, gameRefereeUpdate := range gameRefereeUpdates {
 		bp.Queue(insertGameReferee,
 			gameRefereeUpdate.NBAGameID,
-			gameRefereeUpdate.FirstName,
-			gameRefereeUpdate.LastName)
+			gameRefereeUpdate.NBARefereeID,
+			gameRefereeUpdate.Assignment)
 	}
 
 	batchResults := tx.SendBatch(context.Background(), bp)
@@ -62,6 +64,7 @@ func (grd *GameRefereeDAO) UpdateGameReferees(gameRefereeUpdates []GameRefereeUp
 		err := batchResults.QueryRow().Scan(
 			&gameReferee.GameID,
 			&gameReferee.RefereeID,
+			&gameReferee.Assignment,
 			&gameReferee.CreatedAt,
 			&gameReferee.UpdatedAt)
 

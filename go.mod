@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go v0.46.2 // indirect
 	cloud.google.com/go/datastore v1.0.0
 	github.com/go-chi/chi v1.5.1
+	github.com/go-co-op/gocron v1.9.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.0 // indirect
 	github.com/jackc/pgconn v1.8.1
 	github.com/jackc/pgtype v1.7.0

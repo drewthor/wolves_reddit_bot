@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/util"
 
@@ -28,7 +29,7 @@ func (gc GameController) Routes() chi.Router {
 }
 
 func (gc GameController) List(w http.ResponseWriter, r *http.Request) {
-	gameDate := chi.URLParam(r, "game-date")
+	gameDate := r.URL.Query().Get("game-date")
 
 	if gameDate == "" {
 		util.WriteJSON(http.StatusBadRequest, "invalid request: missing game_date", w)
@@ -38,16 +39,24 @@ func (gc GameController) List(w http.ResponseWriter, r *http.Request) {
 	games, err := gc.GameService.Get(gameDate)
 	if err != nil {
 		util.WriteJSON(http.StatusInternalServerError, err, w)
+		return
 	}
 
 	util.WriteJSON(http.StatusOK, games, w)
 }
 
 func (gc GameController) UpdateGames(w http.ResponseWriter, r *http.Request) {
-	games, err := gc.GameService.UpdateGames()
+	seasonStartYear, err := strconv.Atoi(r.URL.Query().Get("season-start-year"))
+	if err != nil {
+		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
+		return
+	}
+
+	games, err := gc.GameService.UpdateGames(seasonStartYear)
 
 	if err != nil {
 		util.WriteJSON(http.StatusInternalServerError, err, w)
+		return
 	}
 
 	util.WriteJSON(http.StatusOK, games, w)

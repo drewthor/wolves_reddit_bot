@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/drewthor/wolves_reddit_bot/schedule"
+
 	"github.com/drewthor/wolves_reddit_bot/dao"
 
 	"github.com/drewthor/wolves_reddit_bot/service"
@@ -18,6 +20,10 @@ import (
 )
 
 func main() {
+	s := schedule.NewScheduler()
+
+	s.StartAsync()
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)

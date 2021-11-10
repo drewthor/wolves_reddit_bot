@@ -8,6 +8,8 @@ import (
 	"net/http"
 )
 
+const PlayerHeadshotURL = "https://cdn.nba.com/headshots/nba/latest/260x190/%d.png"
+
 type Players struct {
 	LeagueNode struct {
 		Players []Player `json:"standard"`

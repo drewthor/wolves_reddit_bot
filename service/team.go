@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
@@ -30,45 +31,45 @@ func (ts TeamService) GetAll() ([]api.Team, error) {
 	return teams, err
 }
 
-func (ts TeamService) UpdateTeams() ([]api.Team, error) {
-	teams, err := ts.getAllTeamsFromNBAApi()
+func (ts TeamService) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
+	nbaTeams, err := nba.GetTeamsForSeason(seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
 
-	updatedTeams, err := ts.TeamDAO.UpdateTeams(teams)
-	if err != nil {
-		return nil, err
-	}
-
-	return updatedTeams, nil
-}
-
-func (ts TeamService) getAllTeamsFromNBAApi() ([]api.Team, error) {
-	nbaTeams := nba.GetTeams(nba.GetDailyAPIPaths().Teams)
-
-	teams := []api.Team{}
+	teamUpdates := []dao.TeamUpdate{}
 	for _, nbaTeam := range nbaTeams {
 		league := "nba"
 		if !nbaTeam.IsNBAFranchise {
 			league = "international"
 		}
-		teams = append(teams, api.Team{
-			Name:          nbaTeam.FullName,
-			Nickname:      nbaTeam.Nickname,
-			City:          nbaTeam.City,
-			AlternateCity: nbaTeam.AlternateCity,
-			League:        league,
-			Season:        CURRENT_SEASON_START_YEAR,
-			Conference:    strings.ToLower(nbaTeam.Conference),
-			Division:      strings.ToLower(nbaTeam.Division),
-			NBAURLName:    nbaTeam.UrlName,
-			NBATeamID:     nbaTeam.ID,
-			NBAShortName:  nbaTeam.ShortName,
+
+		teamID, err := strconv.Atoi(nbaTeam.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		teamUpdates = append(teamUpdates, dao.TeamUpdate{
+			Name:            nbaTeam.FullName,
+			Nickname:        nbaTeam.Nickname,
+			City:            nbaTeam.City,
+			AlternateCity:   nbaTeam.AlternateCity,
+			LeagueName:      league,
+			SeasonStartYear: seasonStartYear,
+			ConferenceName:  strings.ToLower(nbaTeam.Conference),
+			DivisionName:    strings.ToLower(nbaTeam.Division),
+			NBAURLName:      nbaTeam.UrlName,
+			NBATeamID:       teamID,
+			NBAShortName:    nbaTeam.ShortName,
 		})
 	}
 
-	return teams, nil
+	updatedTeams, err := ts.TeamDAO.UpdateTeams(teamUpdates)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedTeams, nil
 }
 
 // get a mapping from nba team id -> db team id

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/util"
 
@@ -51,7 +52,13 @@ func (tc TeamController) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (tc TeamController) UpdateTeams(w http.ResponseWriter, r *http.Request) {
-	teams, err := tc.TeamService.UpdateTeams()
+	seasonStartYear, err := strconv.Atoi(r.URL.Query().Get("season-start-year"))
+	if err != nil {
+		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
+		return
+	}
+
+	teams, err := tc.TeamService.UpdateTeams(seasonStartYear)
 
 	if err != nil {
 		util.WriteJSON(http.StatusInternalServerError, err, w)

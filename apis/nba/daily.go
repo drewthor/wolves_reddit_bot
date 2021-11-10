@@ -45,7 +45,7 @@ type DailyAPIPaths struct {
 	LeagueStandings           string `json:"leagueUngroupedStandings"` // e.g. "/prod/v1/current/standings_all.json"
 }
 
-func GetDailyAPIPaths() DailyAPIPaths {
+func GetDailyAPIPaths() DailyAPI {
 	url := nbaAPIBaseURI + NBADailyAPIPath
 	response, httpErr := http.Get(url)
 
@@ -66,5 +66,5 @@ func GetDailyAPIPaths() DailyAPIPaths {
 	if dailyAPIResult.APIPaths.CurrentDate == "" || dailyAPIResult.APIPaths.Teams == "" || dailyAPIResult.APIPaths.TeamSchedule == "" || dailyAPIResult.APIPaths.Scoreboard == "" {
 		log.Fatal("Could not get daily API paths")
 	}
-	return dailyAPIResult.APIPaths
+	return dailyAPIResult
 }

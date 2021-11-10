@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"time"
 )
 
 type Game struct {
@@ -11,7 +12,7 @@ type Game struct {
 	SeasonStage      seasonStage       `json:"seasonStageId"`
 	Status           int               `json:"statusNum"`
 	StartDateEastern string            `json:"startDateEastern"`
-	StartTimeUTC     string            `json:"startTimeUTC"`
+	StartTimeUTC     time.Time         `json:"startTimeUTC"`
 	PlayoffsNode     *PlayoffsGameInfo `json:"playoffs,omitempty"`
 	HomeTeam         TeamGameInfo      `json:"hTeam"`
 	AwayTeam         TeamGameInfo      `json:"vTeam"`

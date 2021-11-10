@@ -22,7 +22,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	currentTimeWestern := currentTimeUTC.In(westCoastLocation)
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
 	log.Println(currentDateWestern)
-	dailyAPIPaths := nba.GetDailyAPIPaths()
+	dailyAPIPaths := nba.GetDailyAPIPaths().APIPaths
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
 	var team *nba.Team
 	for _, t := range teams {
@@ -42,7 +42,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 
 	if gameToday {
 		log.Println("game today")
-		boxscore, err := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		boxscore, err := nba.GetCurrentSeasonBoxscore(todaysGame.GameID, currentDateWestern)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -16,7 +16,7 @@ type Team struct {
 	Division      string     `json:"division"`
 	NBAURLName    string     `json:"nba_url_name"`
 	NBAShortName  string     `json:"nba_short_name"`
-	NBATeamID     string     `json:"nba_team_id"`
+	NBATeamID     int        `json:"nba_team_id"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     *time.Time `json:"updated_at"`
 }

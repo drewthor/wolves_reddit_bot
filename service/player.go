@@ -40,7 +40,7 @@ func (ps PlayerService) UpdatePlayers() ([]api.Player, error) {
 }
 
 func (ps PlayerService) getAllPlayersFromNBAApi() ([]api.Player, error) {
-	nbaPlayers, err := nba.GetPlayers(nba.GetDailyAPIPaths().Players)
+	nbaPlayers, err := nba.GetPlayers(nba.GetDailyAPIPaths().APIPaths.Players)
 
 	if err != nil {
 		return nil, err

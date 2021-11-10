@@ -14,8 +14,10 @@ type RefereeDAO struct {
 }
 
 type RefereeUpdate struct {
-	FirstName string
-	LastName  string
+	NBARefereeID int
+	FirstName    string
+	LastName     string
+	JerseyNumber int
 }
 
 func (rd *RefereeDAO) UpdateReferees(refereeUpdates []RefereeUpdate) ([]api.Referee, error) {
@@ -27,20 +29,24 @@ func (rd *RefereeDAO) UpdateReferees(refereeUpdates []RefereeUpdate) ([]api.Refe
 
 	insertReferee := `
 		INSERT INTO nba.referee
-			as r(first_name, last_name)
-		VALUES ($1, $2)
-		ON CONFLICT (first_name, last_name) DO UPDATE
+			as r(first_name, last_name, jersey_number, nba_referee_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (nba_referee_id) DO UPDATE
 		SET 
 			first_name = coalesce(excluded.first_name, r.first_name),
-			last_name = coalesce(excluded.last_name, r.last_name)
-		RETURNING r.id, r.first_name, r.last_name, r.created_at, r.updated_at`
+			last_name = coalesce(excluded.last_name, r.last_name),
+			jersey_number = coalesce(excluded.jersey_number, r.jersey_number),
+			nba_referee_id = coalesce(excluded.nba_referee_id, r.nba_referee_id)
+		RETURNING r.id, r.first_name, r.last_name, r.jersey_number, r.nba_referee_id, r.created_at, r.updated_at`
 
 	bp := &pgx.Batch{}
 
 	for _, refereeUpdate := range refereeUpdates {
 		bp.Queue(insertReferee,
 			refereeUpdate.FirstName,
-			refereeUpdate.LastName)
+			refereeUpdate.LastName,
+			refereeUpdate.JerseyNumber,
+			refereeUpdate.NBARefereeID)
 	}
 
 	batchResults := tx.SendBatch(context.Background(), bp)
@@ -54,6 +60,8 @@ func (rd *RefereeDAO) UpdateReferees(refereeUpdates []RefereeUpdate) ([]api.Refe
 			&referee.ID,
 			&referee.FirstName,
 			&referee.LastName,
+			&referee.JerseyNumber,
+			&referee.NBARefereeID,
 			&referee.CreatedAt,
 			&referee.UpdatedAt)
 

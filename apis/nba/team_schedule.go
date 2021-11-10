@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 )
 
 type TeamSchedule struct {
@@ -39,7 +40,7 @@ func GetCurrentTeamSchedule(teamAPIPath, teamID string) (GamesByStartDate, error
 	}
 	scheduledGameMap := map[string]Game{}
 	for _, scheduledGame := range teamScheduleResult.LeagueNode.Games {
-		if scheduledGame.StartDateEastern != "" && scheduledGame.StartTimeUTC != "" && scheduledGame.GameID != "" {
+		if scheduledGame.StartDateEastern != "" && scheduledGame.StartTimeUTC.Equal(time.Time{}) && scheduledGame.GameID != "" {
 			scheduledGameMap[scheduledGame.StartDateEastern] = scheduledGame
 		}
 	}

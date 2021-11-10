@@ -15,10 +15,11 @@ type ArenaDAO struct {
 }
 
 type ArenaUpdate struct {
-	Name    string
-	City    sql.NullString
-	State   sql.NullString
-	Country string
+	NBAArenaID int
+	Name       string
+	City       sql.NullString
+	State      sql.NullString
+	Country    string
 }
 
 func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
@@ -30,15 +31,16 @@ func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
 
 	insertArena := `
 		INSERT INTO nba.arena
-			as a(name, city, state, country)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (name) DO UPDATE
+			as a(name, city, state, country, nba_arena_id)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (nba_arena_id) DO UPDATE
 		SET
 			name = coalesce(excluded.name, a.name),
 			city = coalesce(excluded.city, a.city),
 			state = coalesce(excluded.state, a.state),
-			country = coalesce(excluded.country, a.country)
-		RETURNING a.id, a.name, a.city, a.state, a.country, a.created_at, a.updated_at`
+			country = coalesce(excluded.country, a.country),
+			nba_arena_id = coalesce(excluded.nba_arena_id, a.nba_arena_id)
+		RETURNING a.id, a.name, a.city, a.state, a.country, a.nba_arena_id, a.created_at, a.updated_at`
 
 	bp := &pgx.Batch{}
 
@@ -47,7 +49,8 @@ func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
 			arena.Name,
 			arena.City,
 			arena.State,
-			arena.Country)
+			arena.Country,
+			arena.NBAArenaID)
 	}
 
 	batchResults := tx.SendBatch(context.Background(), bp)
@@ -62,6 +65,7 @@ func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
 			&arena.City,
 			&arena.State,
 			&arena.Country,
+			&arena.NBAArenaID,
 			&arena.CreatedAt,
 			&arena.UpdatedAt)
 
