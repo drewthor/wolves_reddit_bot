@@ -43,5 +43,5 @@ kill_timeout = 5
     timeout = "2s"
 
 [mounts]
-  source="data"
-  destination="/data"
+  source = "data"
+  destination = "/data"

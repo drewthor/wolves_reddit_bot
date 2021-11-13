@@ -356,6 +356,10 @@ func (b *BoxscoreOld) IsPlayoffGame() bool {
 	return b.BasicGameDataNode.SeasonStage == postSeason || b.BasicGameDataNode.PlayoffsNode != nil
 }
 
+func (b *BoxscoreOld) Final() bool {
+	return b.BasicGameDataNode.StatusNum == 3
+}
+
 func (b *BoxscoreOld) GameEnded() bool {
 	if b.StatsNode == nil {
 		// the nba api will post a boxscore without the stats json node for some time before games
@@ -1341,14 +1345,21 @@ func GetOldBoxscore(gameID, gameDate string, seasonStartYear int) (BoxscoreOld, 
 	}
 
 	reqBody := []byte{}
+	boxscoreResult := BoxscoreOld{}
 
+	gameIsOver := false
 	if stat.Size() > 0 {
 		reqBody, err = ioutil.ReadAll(file)
 
+		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscoreResult)
+		if err == nil {
+			gameIsOver = boxscoreResult.Final()
+		}
 	}
 
-	if stat.Size() <= 0 {
-		url := fmt.Sprintf(OldBoxscoreURL, gameDate, gameID)
+	if stat.Size() <= 0 || !gameIsOver {
+		// remove all -'s in the game date. YYYY-mm-dd is a proper format but the old boxscore url uses no -'s like YYYYmmdd
+		url := fmt.Sprintf(OldBoxscoreURL, strings.ReplaceAll(gameDate, "-", ""), gameID)
 		response, err := http.Get(url)
 
 		if response != nil {
@@ -1360,17 +1371,14 @@ func GetOldBoxscore(gameID, gameDate string, seasonStartYear int) (BoxscoreOld, 
 		}
 
 		reqBody, err = ioutil.ReadAll(response.Body)
+		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscoreResult)
+		if err != nil {
+			return BoxscoreOld{}, err
+		}
 
 		io.Copy(file, bytes.NewReader(reqBody))
-	} else {
-		reqBody, err = ioutil.ReadAll(file)
 	}
 
-	boxscoreResult := BoxscoreOld{}
-	err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscoreResult)
-	if err != nil {
-		return BoxscoreOld{}, err
-	}
 	return boxscoreResult, nil
 
 }
@@ -1394,8 +1402,20 @@ func GetBoxscoreDetailed(gameID string, seasonStartYear int) (Boxscore, error) {
 	}
 
 	reqBody := []byte{}
+	boxscore := Boxscore{}
 
-	if stat.Size() <= 0 {
+	gameIsOver := false
+	if stat.Size() > 0 {
+		reqBody, err = ioutil.ReadAll(file)
+
+		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscore)
+		if err == nil {
+			gameIsOver = boxscore.Final()
+		}
+
+	}
+
+	if stat.Size() <= 0 || !gameIsOver {
 		url := fmt.Sprintf(BoxscoreURL, gameID)
 		response, err := http.Get(url)
 
@@ -1408,16 +1428,13 @@ func GetBoxscoreDetailed(gameID string, seasonStartYear int) (Boxscore, error) {
 		}
 
 		reqBody, err = ioutil.ReadAll(response.Body)
+		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscore)
+		if err != nil {
+			return Boxscore{}, err
+		}
 
 		io.Copy(file, bytes.NewReader(reqBody))
-	} else {
-		reqBody, err = ioutil.ReadAll(file)
 	}
 
-	boxscore := Boxscore{}
-	err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscore)
-	if err != nil {
-		return Boxscore{}, err
-	}
 	return boxscore, nil
 }

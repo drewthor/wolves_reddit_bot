@@ -1,6 +1,7 @@
 package schedule
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -34,11 +35,11 @@ func getTodaysGamesAndAddToJobs(s *gocron.Scheduler) {
 func getGameData(s *gocron.Scheduler, gameID, gameDate string) {
 	boxscore, err := nba.GetBoxscoreDetailed(gameID, time.Now().Year())
 	if err != nil {
-		log.Printf("could not retrieve detailed boxscore for gameID: %s\n", gameID)
+		log.Println(fmt.Sprintf("could not retrieve detailed boxscore for gameID: %s", gameID), err)
 	}
 	_, err = nba.GetOldBoxscore(gameID, gameDate, time.Now().Year())
 	if err != nil {
-		log.Printf("could not retrieve old boxscore for gameID: %s\n", gameID)
+		log.Println(fmt.Sprintf("could not retrieve old boxscore for gameID: %s", gameID), err)
 	}
 
 	if boxscore.Final() {
