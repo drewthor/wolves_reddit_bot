@@ -46,7 +46,8 @@ func main() {
 	gameRefereeService := &service.GameRefereeService{GameRefereeDAO: &dao.GameRefereeDAO{DB: dbpool}}
 	refereeService := &service.RefereeService{RefereeDAO: &dao.RefereeDAO{DB: dbpool}}
 	seasonStageService := &service.SeasonStageService{}
-	teamService := &service.TeamService{TeamDAO: &dao.TeamDAO{DB: dbpool}}
+	teamSeasonService := &service.TeamSeasonService{TeamSeasonDao: &dao.TeamSeasonDAO{DB: dbpool}}
+	teamService := &service.TeamService{TeamDAO: &dao.TeamDAO{DB: dbpool}, TeamSeasonService: teamSeasonService}
 	gameService := &service.GameService{
 		GameDAO:            &dao.GameDAO{DB: dbpool},
 		ArenaService:       arenaService,

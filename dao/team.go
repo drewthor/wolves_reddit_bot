@@ -15,44 +15,42 @@ type TeamDAO struct {
 }
 
 type TeamUpdate struct {
-	Name            string
-	Nickname        string
-	City            string
-	AlternateCity   string
-	LeagueName      string
-	SeasonStartYear int
-	ConferenceName  string
-	DivisionName    string
-	NBAURLName      string
-	NBAShortName    string
-	NBATeamID       int
+	Name          string
+	Nickname      string
+	City          string
+	AlternateCity string
+	NBAURLName    string
+	NBAShortName  string
+	NBATeamID     int
 }
 
 func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 	query := `
-		SELECT id, t.name, nickname, city, city_alternate, state, country, league.name, season.name, conference.name, division.name, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
+		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t, 
-		LATERAL (
-			SELECT l.name
-			FROM nba.league l
-			WHERE l.id = t.league_id
-        ) league,
-		LATERAL (
-		        SELECT CONCAT(s.start_year, '-', s.end_year)
-				FROM nba.season s
-				WHERE s.id = t.season_id
-		) season,
-		LATERAL (
-		        SELECT c.name
-				FROM nba.conference c
-				WHERE c.id = t.season_id
-        ) conference,
-		LATERAL (
-		        SELECT d.name
-				FROM nba.division d
-				WHERE d.id = t.season_id
-        ) division
 		WHERE id = $1`
+
+	// LATERAL (
+	// 	SELECT l.name
+	// 	FROM nba.league l
+	// 	WHERE l.id = t.league_id
+	// ) league,
+	// LATERAL (
+	//         SELECT CONCAT(s.start_year, '-', s.end_year)
+	// 		FROM nba.season s
+	// 		WHERE s.id = t.season_id
+	// ) season,
+	// LATERAL (
+	//         SELECT c.name
+	// 		FROM nba.conference c
+	// 		WHERE c.id = t.season_id
+	// ) conference,
+	// LATERAL (
+	//         SELECT d.name
+	// 		FROM nba.division d
+	// 		WHERE d.id = t.season_id
+	// ) division
+	// WHERE id = $1`
 
 	team := api.Team{}
 
@@ -64,10 +62,7 @@ func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 		&team.AlternateCity,
 		&team.State,
 		&team.Country,
-		&team.League,
-		&team.Season,
-		&team.Conference,
-		&team.Division,
+		&team.FranchiseID,
 		&team.NBAURLName,
 		&team.NBAShortName,
 		&team.NBATeamID,
@@ -83,28 +78,8 @@ func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 
 func (td *TeamDAO) GetByIDs(ids []string) ([]api.Team, error) {
 	query := `
-		SELECT id, t.name, nickname, city, city_alternate, state, country, league.name, season.name, conference.name, division.name, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
-		FROM nba.team t, 
-		LATERAL (
-			SELECT l.name
-			FROM nba.league l
-			WHERE l.id = t.league_id
-        ) league,
-		LATERAL (
-		        SELECT CONCAT(s.start_year, '-', s.end_year) as name
-				FROM nba.season s
-				WHERE s.id = t.season_id
-		) season,
-		LATERAL (
-		        SELECT c.name
-				FROM nba.conference c
-				WHERE c.id = t.conference_id
-        ) conference,
-		LATERAL (
-		        SELECT d.name
-				FROM nba.division d
-				WHERE d.id = t.division_id
-        ) division
+		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
+		FROM nba.team t
 		WHERE id = ANY($1)`
 
 	rows, err := td.DB.Query(context.Background(), query, ids)
@@ -124,10 +99,7 @@ func (td *TeamDAO) GetByIDs(ids []string) ([]api.Team, error) {
 			&team.AlternateCity,
 			&team.State,
 			&team.Country,
-			&team.League,
-			&team.Season,
-			&team.Conference,
-			&team.Division,
+			&team.FranchiseID,
 			&team.NBAURLName,
 			&team.NBAShortName,
 			&team.NBATeamID,
@@ -140,33 +112,12 @@ func (td *TeamDAO) GetByIDs(ids []string) ([]api.Team, error) {
 	}
 
 	return teams, nil
-
 }
 
 func (td *TeamDAO) GetAll() ([]api.Team, error) {
 	query := `
-		SELECT id, t.name, nickname, city, city_alternate, state, country, league.name, season.name, conference.name, division.name, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
-		FROM nba.team t, 
-		LATERAL (
-			SELECT l.name
-			FROM nba.league l
-			WHERE l.id = t.league_id
-        ) league,
-		LATERAL (
-		        SELECT CONCAT(s.start_year, '-', s.end_year) as name
-				FROM nba.season s
-				WHERE s.id = t.season_id
-		) season,
-		LATERAL (
-		        SELECT c.name
-				FROM nba.conference c
-				WHERE c.id = t.conference_id
-        ) conference,
-		LATERAL (
-		        SELECT d.name
-				FROM nba.division d
-				WHERE d.id = t.division_id
-        ) division`
+		SELECT id, t.name, nickname, city, city_alternate, state, country, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
+		FROM nba.team t`
 
 	rows, err := td.DB.Query(context.Background(), query)
 	if err != nil {
@@ -185,10 +136,7 @@ func (td *TeamDAO) GetAll() ([]api.Team, error) {
 			&team.AlternateCity,
 			&team.State,
 			&team.Country,
-			&team.League,
-			&team.Season,
-			&team.Conference,
-			&team.Division,
+			&team.FranchiseID,
 			&team.NBAURLName,
 			&team.NBAShortName,
 			&team.NBATeamID,
@@ -212,18 +160,14 @@ func (td *TeamDAO) UpdateTeams(teams []TeamUpdate) ([]api.Team, error) {
 
 	insertTeam := `
 		INSERT INTO nba.team
-			as t(name, nickname, city, city_alternate, league_id, season_id, conference_id, division_id, nba_url_name, nba_short_name, nba_team_id)
-		VALUES ($1, $2, $3, $4, (SELECT id FROM nba.league WHERE name = $5), (SELECT id FROM nba.season WHERE start_year = $6), (SELECT id FROM nba.conference WHERE name = $7), (SELECT id FROM nba.division WHERE name = $8), $9, $10, $11)
-		ON CONFLICT (nba_team_id, season_id) DO UPDATE
+			as t(name, nickname, city, city_alternate, nba_url_name, nba_short_name, nba_team_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (nba_team_id) DO UPDATE
 		SET 
 			name = coalesce(excluded.name, t.name),
 			nickname = coalesce(excluded.nickname, t.nickname),
 			city = coalesce(excluded.city, t.city),
 			city_alternate = coalesce(excluded.city_alternate, t.city_alternate),
-			league_id = coalesce(excluded.league_id, t.league_id),
-			season_id = coalesce(excluded.season_id, t.season_id),
-			conference_id = coalesce(excluded.conference_id, t.conference_id),
-			division_id = coalesce(excluded.division_id, t.division_id),
 			nba_url_name = coalesce(excluded.nba_url_name, t.nba_url_name),
 			nba_short_name = coalesce(excluded.nba_short_name, t.nba_short_name),
 			nba_team_id = coalesce(excluded.nba_team_id, t.nba_team_id)
@@ -238,10 +182,6 @@ func (td *TeamDAO) UpdateTeams(teams []TeamUpdate) ([]api.Team, error) {
 			team.Nickname,
 			team.City,
 			team.AlternateCity,
-			team.LeagueName,
-			team.SeasonStartYear,
-			team.ConferenceName,
-			team.DivisionName,
 			team.NBAURLName,
 			team.NBAShortName,
 			team.NBATeamID)

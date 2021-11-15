@@ -10,10 +10,7 @@ type Team struct {
 	AlternateCity string     `json:"alternate_city"`
 	State         *string    `json:"state"`
 	Country       *string    `json:"country"`
-	League        string     `json:"league"`
-	Season        string     `json:"season"`
-	Conference    string     `json:"conference"`
-	Division      string     `json:"division"`
+	FranchiseID   *string    `json:"franchise_id"`
 	NBAURLName    string     `json:"nba_url_name"`
 	NBAShortName  string     `json:"nba_short_name"`
 	NBATeamID     int        `json:"nba_team_id"`

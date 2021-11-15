@@ -2,7 +2,6 @@ package service
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -10,7 +9,8 @@ import (
 )
 
 type TeamService struct {
-	TeamDAO *dao.TeamDAO
+	TeamDAO           *dao.TeamDAO
+	TeamSeasonService *TeamSeasonService
 }
 
 func (ts TeamService) Get(teamID string) (api.Team, error) {
@@ -37,34 +37,40 @@ func (ts TeamService) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 		return nil, err
 	}
 
+	nbaTeamIDTeamMappings := map[int]nba.Team{}
+
 	teamUpdates := []dao.TeamUpdate{}
 	for _, nbaTeam := range nbaTeams {
-		league := "nba"
-		if !nbaTeam.IsNBAFranchise {
-			league = "international"
-		}
-
 		teamID, err := strconv.Atoi(nbaTeam.ID)
 		if err != nil {
 			return nil, err
 		}
 
 		teamUpdates = append(teamUpdates, dao.TeamUpdate{
-			Name:            nbaTeam.FullName,
-			Nickname:        nbaTeam.Nickname,
-			City:            nbaTeam.City,
-			AlternateCity:   nbaTeam.AlternateCity,
-			LeagueName:      league,
-			SeasonStartYear: seasonStartYear,
-			ConferenceName:  strings.ToLower(nbaTeam.Conference),
-			DivisionName:    strings.ToLower(nbaTeam.Division),
-			NBAURLName:      nbaTeam.UrlName,
-			NBATeamID:       teamID,
-			NBAShortName:    nbaTeam.ShortName,
+			Name:          nbaTeam.FullName,
+			Nickname:      nbaTeam.Nickname,
+			City:          nbaTeam.City,
+			AlternateCity: nbaTeam.AlternateCity,
+			NBAURLName:    nbaTeam.UrlName,
+			NBATeamID:     teamID,
+			NBAShortName:  nbaTeam.ShortName,
 		})
+
+		nbaTeamIDTeamMappings[teamID] = nbaTeam
 	}
 
+	teamIDNBATeamMappings := map[string]nba.Team{}
+
 	updatedTeams, err := ts.TeamDAO.UpdateTeams(teamUpdates)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, updatedTeam := range updatedTeams {
+		teamIDNBATeamMappings[updatedTeam.ID] = nbaTeamIDTeamMappings[updatedTeam.NBATeamID]
+	}
+
+	_, err = ts.TeamSeasonService.UpdateTeamSeasons(teamIDNBATeamMappings, seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
