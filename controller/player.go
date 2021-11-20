@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/util"
 
@@ -50,7 +51,13 @@ func (pc PlayerController) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pc PlayerController) UpdatePlayers(w http.ResponseWriter, r *http.Request) {
-	players, err := pc.PlayerService.UpdatePlayers()
+	seasonStartYear, err := strconv.Atoi(r.URL.Query().Get("season-start-year"))
+	if err != nil {
+		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
+		return
+	}
+
+	players, err := pc.PlayerService.UpdatePlayers(seasonStartYear)
 
 	if err != nil {
 		util.WriteJSON(http.StatusInternalServerError, err, w)

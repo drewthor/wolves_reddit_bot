@@ -26,6 +26,6 @@ func PositionFromNBAPosition(pos string) []string {
 	case "C":
 		return []string{string(Center)}
 	default:
-		return []string{string(Unknown)}
+		return []string{}
 	}
 }

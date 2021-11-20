@@ -22,7 +22,8 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	currentTimeWestern := currentTimeUTC.In(westCoastLocation)
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
 	log.Println(currentDateWestern)
-	dailyAPIPaths := nba.GetDailyAPIPaths().APIPaths
+	dailyAPIInfo := nba.GetDailyAPIPaths()
+	dailyAPIPaths := dailyAPIInfo.APIPaths
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
 	var team *nba.Team
 	for _, t := range teams {
@@ -58,7 +59,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient.Authorize()
 			log.Println("authorized")
 			title := boxscore.GetRedditGameThreadTitle(teamTriCode, teams)
-			players, err := nba.GetPlayers(dailyAPIPaths.Players)
+			players, err := nba.GetPlayers(dailyAPIInfo.APISeasonInfoNode.SeasonYear)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -88,7 +89,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient.Authorize()
 			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.PostGameThreadRedditPostFullname}, subreddit)
 			postGameThreadURL := thingURLMapping[gameEvent.PostGameThreadRedditPostFullname]
-			players, err := nba.GetPlayers(dailyAPIPaths.Players)
+			players, err := nba.GetPlayers(dailyAPIInfo.APISeasonInfoNode.SeasonYear)
 			if err != nil {
 				log.Fatal(err)
 			}

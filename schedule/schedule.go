@@ -33,6 +33,7 @@ func getTodaysGamesAndAddToJobs(s *gocron.Scheduler) {
 }
 
 func getGameData(s *gocron.Scheduler, gameID, gameDate string) {
+	log.Println("Getting game data for game: ", gameID, " for gameDate: ", gameDate)
 	boxscore, err := nba.GetBoxscoreDetailed(gameID, time.Now().Year())
 	if err != nil {
 		log.Println(fmt.Sprintf("could not retrieve detailed boxscore for gameID: %s", gameID), err)
@@ -43,6 +44,12 @@ func getGameData(s *gocron.Scheduler, gameID, gameDate string) {
 	}
 
 	if boxscore.Final() {
-		s.RemoveByTag(gameID)
+		log.Println("scheduler length before removing: ", s.Len())
+		log.Println("removing shceduled job with tag: ", gameID)
+		log.Println("scheduler length after removing: ", s.Len())
+		err = s.RemoveByTag(gameID)
+		if err != nil {
+			log.Println("could not remove scheduled job with tag: ", gameID, " error: ", err)
+		}
 	}
 }

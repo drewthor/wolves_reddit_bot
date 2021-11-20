@@ -73,7 +73,9 @@ type seasonStage int
 const (
 	preSeason     seasonStage = 1
 	regularSeason seasonStage = 2
-	postSeason    seasonStage = 3
+	allStar       seasonStage = 3
+	postSeason    seasonStage = 4
+	playIn        seasonStage = 5
 )
 
 type TriCode string

@@ -2,6 +2,7 @@ package nba
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -9,6 +10,7 @@ import (
 )
 
 const PlayerHeadshotURL = "https://cdn.nba.com/headshots/nba/latest/260x190/%d.png"
+const seasonPlayersURL = "https://data.nba.net/prod/v1/%d/players.json"
 
 type Players struct {
 	LeagueNode struct {
@@ -37,8 +39,8 @@ type Player struct {
 	Country         string `json:"country"`
 }
 
-func GetPlayers(playersAPIPath string) ([]Player, error) {
-	url := makeURIFormattable(nbaAPIBaseURI + playersAPIPath)
+func GetPlayers(seasonStartYear int) ([]Player, error) {
+	url := fmt.Sprintf(seasonPlayersURL, seasonStartYear)
 	response, httpErr := http.Get(url)
 
 	defer func() {

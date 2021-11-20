@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log"
 	"strconv"
 	"time"
 
@@ -30,17 +31,21 @@ func (ps PlayerService) GetAll() ([]api.Player, error) {
 	return players, nil
 }
 
-func (ps PlayerService) UpdatePlayers() ([]api.Player, error) {
-	players, err := ps.getAllPlayersFromNBAApi()
+func (ps PlayerService) UpdatePlayers(seasonStartYear int) ([]api.Player, error) {
+	players, err := ps.getSeasonPlayers(seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
 	updatedPlayers, err := ps.PlayerDAO.UpdatePlayers(players)
+	if err != nil {
+		return nil, err
+	}
+
 	return updatedPlayers, nil
 }
 
-func (ps PlayerService) getAllPlayersFromNBAApi() ([]api.Player, error) {
-	nbaPlayers, err := nba.GetPlayers(nba.GetDailyAPIPaths().APIPaths.Players)
+func (ps PlayerService) getSeasonPlayers(seasonStartYear int) ([]api.Player, error) {
+	nbaPlayers, err := nba.GetPlayers(seasonStartYear)
 
 	if err != nil {
 		return nil, err
@@ -48,40 +53,34 @@ func (ps PlayerService) getAllPlayersFromNBAApi() ([]api.Player, error) {
 
 	players := []api.Player{}
 	for _, nbaPlayer := range nbaPlayers {
-		birthdate, err := time.Parse(nba.TimeBirthdateFormat, nbaPlayer.DateOfBirthUTC)
+		birthdate := new(time.Time)
+		*birthdate, err = time.Parse(nba.TimeBirthdateFormat, nbaPlayer.DateOfBirthUTC)
 		if err != nil {
-			continue
-			// return nil, err
 		}
 
-		heightFeet, err := strconv.Atoi(nbaPlayer.HeightFeet)
+		heightFeet := new(int)
+		*heightFeet, err = strconv.Atoi(nbaPlayer.HeightFeet)
 		if err != nil {
-			continue
-			// return nil, err
 		}
 
-		heightInches, err := strconv.Atoi(nbaPlayer.HeightInches)
+		heightInches := new(int)
+		*heightInches, err = strconv.Atoi(nbaPlayer.HeightInches)
 		if err != nil {
-			continue
-			// return nil, err
 		}
 
-		heightMeters, err := strconv.ParseFloat(nbaPlayer.HeightMeters, 64)
+		heightMeters := new(float64)
+		*heightMeters, err = strconv.ParseFloat(nbaPlayer.HeightMeters, 64)
 		if err != nil {
-			continue
-			// return nil, err
 		}
 
-		weightPounds, err := strconv.Atoi(nbaPlayer.WeightPounds)
+		weightPounds := new(int)
+		*weightPounds, err = strconv.Atoi(nbaPlayer.WeightPounds)
 		if err != nil {
-			continue
-			// return nil, err
 		}
 
-		weightKilograms, err := strconv.ParseFloat(nbaPlayer.WeightKilograms, 64)
+		weightKilograms := new(float64)
+		*weightKilograms, err = strconv.ParseFloat(nbaPlayer.WeightKilograms, 64)
 		if err != nil {
-			continue
-			// return nil, err
 		}
 
 		jerseyNumber := new(int)
@@ -89,25 +88,31 @@ func (ps PlayerService) getAllPlayersFromNBAApi() ([]api.Player, error) {
 			*jerseyNumber, err = strconv.Atoi(nbaPlayer.Jersey)
 			if err != nil {
 				continue
-				// return nil, err
 			}
 		}
 
 		position := api.PositionFromNBAPosition(nbaPlayer.Position)
 
-		yearsPro, err := strconv.Atoi(nbaPlayer.YearsPro)
+		yearsPro := new(int)
+		*yearsPro, err = strconv.Atoi(nbaPlayer.YearsPro)
 		if err != nil {
-			continue
-			// return nil, err
 		}
 
 		nbaDebutYear := new(int)
 		if len(nbaPlayer.NBADebutYear) > 0 {
 			*nbaDebutYear, err = strconv.Atoi(nbaPlayer.NBADebutYear)
 			if err != nil {
-				continue
-				// return nil, err
 			}
+		}
+
+		country := new(string)
+		if nbaPlayer.Country != "" {
+			*country = nbaPlayer.Country
+		}
+
+		nbaPlayerID, err := strconv.Atoi(nbaPlayer.ID)
+		if err != nil {
+			log.Println("could not convert player id: ", nbaPlayer.ID, " to int for player with first name: ", nbaPlayer.FirstName, " last name: ", nbaPlayer.LastName, " for season: ", seasonStartYear)
 		}
 
 		player := api.Player{
@@ -124,8 +129,8 @@ func (ps PlayerService) getAllPlayersFromNBAApi() ([]api.Player, error) {
 			CurrentlyInNBA:  nbaPlayer.CurrentlyInNBA,
 			YearsPro:        yearsPro,
 			NBADebutYear:    nbaDebutYear,
-			NBAPlayerID:     nbaPlayer.ID,
-			Country:         nbaPlayer.Country,
+			NBAPlayerID:     nbaPlayerID,
+			Country:         country,
 		}
 		players = append(players, player)
 	}
