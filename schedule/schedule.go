@@ -1,7 +1,6 @@
 package schedule
 
 import (
-	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -30,7 +29,7 @@ func updateSeasonStartYear() {
 func getTodaysGamesAndAddToJobs(s *gocron.Scheduler) {
 	todaysScoreboard, err := nba.GetTodaysScoreboard()
 	if err != nil {
-		log.Println("cannot run job to get todays games and add them as jobs", err)
+		log.WithError(err).Error("cannot run job to get todays games and add them as jobs")
 		return
 	}
 
@@ -43,11 +42,11 @@ func getGameData(s *gocron.Scheduler, gameID, gameDate string) {
 	log.Println("Getting game data for game: ", gameID, " for gameDate: ", gameDate)
 	boxscore, err := nba.GetBoxscoreDetailed(gameID, nba.NBACurrentSeasonStartYear)
 	if err != nil {
-		log.Println(fmt.Sprintf("could not retrieve detailed boxscore for gameID: %s", gameID), err)
+		log.WithError(err).Errorf("could not retrieve detailed boxscore for gameID: %s", gameID)
 	}
 	_, err = nba.GetOldBoxscore(gameID, gameDate, time.Now().Year())
 	if err != nil {
-		log.Println(fmt.Sprintf("could not retrieve old boxscore for gameID: %s", gameID), err)
+		log.WithError(err).Errorf("could not retrieve old boxscore for gameID: %s", gameID)
 	}
 
 	if boxscore.Final() {

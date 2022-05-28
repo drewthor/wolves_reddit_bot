@@ -110,8 +110,9 @@ func GetTodaysScoreboard() (TodaysScoreboard, error) {
 
 	todaysScoreboard := TodaysScoreboard{}
 	err = json.NewDecoder(response.Body).Decode(&todaysScoreboard)
-
 	if err != nil {
+		b, _ := ioutil.ReadAll(response.Body)
+		log.WithError(err).Errorf("failed to decode todays scoreboard: %s", string(b))
 		return TodaysScoreboard{}, err
 	}
 
