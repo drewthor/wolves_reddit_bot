@@ -1,8 +1,9 @@
-package dao
+package team
 
 import (
 	"context"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/jackc/pgx/v4"
 
@@ -10,7 +11,19 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type TeamDAO struct {
+type Store interface {
+	Get(teamID string) (api.Team, error)
+	GetByIDs(ids []string) ([]api.Team, error)
+	GetAll() ([]api.Team, error)
+	UpdateTeams(teams []TeamUpdate) ([]api.Team, error)
+	NBATeamIDMappings() (map[string]string, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
@@ -24,7 +37,7 @@ type TeamUpdate struct {
 	NBATeamID     int
 }
 
-func (td *TeamDAO) Get(teamID string) (api.Team, error) {
+func (s *store) Get(teamID string) (api.Team, error) {
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t, 
@@ -54,7 +67,7 @@ func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 
 	team := api.Team{}
 
-	err := td.DB.QueryRow(context.Background(), query, teamID).Scan(
+	err := s.DB.QueryRow(context.Background(), query, teamID).Scan(
 		&team.ID,
 		&team.Name,
 		&team.Nickname,
@@ -76,13 +89,13 @@ func (td *TeamDAO) Get(teamID string) (api.Team, error) {
 	return team, nil
 }
 
-func (td *TeamDAO) GetByIDs(ids []string) ([]api.Team, error) {
+func (s *store) GetByIDs(ids []string) ([]api.Team, error) {
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t
 		WHERE id = ANY($1)`
 
-	rows, err := td.DB.Query(context.Background(), query, ids)
+	rows, err := s.DB.Query(context.Background(), query, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -114,12 +127,12 @@ func (td *TeamDAO) GetByIDs(ids []string) ([]api.Team, error) {
 	return teams, nil
 }
 
-func (td *TeamDAO) GetAll() ([]api.Team, error) {
+func (s *store) GetAll() ([]api.Team, error) {
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t`
 
-	rows, err := td.DB.Query(context.Background(), query)
+	rows, err := s.DB.Query(context.Background(), query)
 	if err != nil {
 		return nil, err
 	}
@@ -151,8 +164,9 @@ func (td *TeamDAO) GetAll() ([]api.Team, error) {
 	return teams, nil
 }
 
-func (td *TeamDAO) UpdateTeams(teams []TeamUpdate) ([]api.Team, error) {
-	tx, err := td.DB.Begin(context.Background())
+func (s *store) UpdateTeams(teams []TeamUpdate) ([]api.Team, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err
@@ -211,15 +225,15 @@ func (td *TeamDAO) UpdateTeams(teams []TeamUpdate) ([]api.Team, error) {
 		return nil, err
 	}
 
-	return td.GetByIDs(insertedTeamIDs)
+	return s.GetByIDs(insertedTeamIDs)
 }
 
-func (td *TeamDAO) NBATeamIDMappings() (map[string]string, error) {
+func (s *store) NBATeamIDMappings() (map[string]string, error) {
 	query := `
 		SELECT id, nba_team_id
 		FROM nba.team t`
 
-	rows, err := td.DB.Query(context.Background(), query)
+	rows, err := s.DB.Query(context.Background(), query)
 	if err != nil {
 		return nil, err
 	}

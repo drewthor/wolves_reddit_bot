@@ -1,33 +1,52 @@
-package service
+package game
 
 import (
 	"database/sql"
-	"log"
 	"strconv"
 	"sync"
 
+	"github.com/drewthor/wolves_reddit_bot/internal/arena"
+	"github.com/drewthor/wolves_reddit_bot/internal/game_referee"
+	"github.com/drewthor/wolves_reddit_bot/internal/referee"
+	"github.com/drewthor/wolves_reddit_bot/internal/team"
+	"github.com/drewthor/wolves_reddit_bot/util"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
-	"github.com/drewthor/wolves_reddit_bot/dao"
 )
 
-type GameService struct {
-	GameDAO *dao.GameDAO
-
-	ArenaService       *ArenaService
-	GameRefereeService *GameRefereeService
-	RefereeService     *RefereeService
-	SeasonStageService *SeasonStageService
-	TeamService        *TeamService
+type Service interface {
+	Get(gameDate string) (api.Games, error)
+	UpdateGames(seasonStartYear int) ([]api.Game, error)
 }
 
-func (gs GameService) Get(gameDate string) (api.Games, error) {
+func NewService(gameStore Store, arenaService arena.Service, gameRefereeService game_referee.Service, refereeService referee.Service, teamService team.Service) Service {
+	return &service{
+		GameStore:          gameStore,
+		ArenaService:       arenaService,
+		GameRefereeService: gameRefereeService,
+		RefereeService:     refereeService,
+		TeamService:        teamService,
+	}
+}
+
+type service struct {
+	GameStore Store
+
+	ArenaService       arena.Service
+	GameRefereeService game_referee.Service
+	RefereeService     referee.Service
+	TeamService        team.Service
+}
+
+func (s *service) Get(gameDate string) (api.Games, error) {
 	gameScoreboards := nba.GetGameScoreboards(gameDate)
 	return api.Games{Games: gameScoreboards.Games}, nil
 }
 
-func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
-	nbaGames, err := gs.getSeasonLeagueScheduleFromNBAAPI(seasonStartYear)
+func (s *service) UpdateGames(seasonStartYear int) ([]api.Game, error) {
+	nbaGames, err := s.getSeasonLeagueScheduleFromNBAAPI(seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +59,7 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 	boxscoreResults := make(chan boxscoreComposite, len(nbaGames))
 
 	wg := sync.WaitGroup{}
-	maxConcurrentCalls := 20
+	maxConcurrentCalls := 5
 	sem := make(chan int, maxConcurrentCalls)
 
 	worker := func(nbaGame nba.Game, boxscoreResults chan<- boxscoreComposite) {
@@ -80,14 +99,14 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 		close(boxscoreResults)
 	}()
 
-	arenaUpdates := []dao.ArenaUpdate{}
-	refereeUpdates := []dao.RefereeUpdate{}
-	gameUpdatesOld := []dao.GameUpdateOld{}
-	gameUpdates := []dao.GameUpdate{}
-	gameRefereeUpdates := []dao.GameRefereeUpdate{}
+	arenaUpdates := []arena.ArenaUpdate{}
+	refereeUpdates := []referee.RefereeUpdate{}
+	gameUpdatesOld := []GameUpdateOld{}
+	gameUpdates := []GameUpdate{}
+	gameRefereeUpdates := []game_referee.GameRefereeUpdate{}
 
-	gameStatusNameMappings := gs.nbaGameStatusNameMappings()
-	seasonStageNameMappings := gs.SeasonStageService.NBASeasonStageNameMappings()
+	gameStatusNameMappins := util.NBAGameStatusNameMappings()
+	seasonStageNameMappins := util.NBASeasonStageNameMappings()
 
 	for boxscoreResult := range boxscoreResults {
 		boxscoreOld := boxscoreResult.Old
@@ -151,7 +170,7 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 				endTime.Valid = true
 			}
 
-			gameUpdate := dao.GameUpdateOld{
+			gameUpdate := GameUpdateOld{
 				NBAHomeTeamID: homeTeamID,
 				NBAAwayTeamID: awayTeamID,
 				HomeTeamPoints: sql.NullInt64{
@@ -162,17 +181,17 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 					Int64: int64(awayTeamPoints),
 					Valid: awayTeamPointsValid,
 				},
-				GameStatusName:                  gameStatusNameMappings[boxscoreOld.BasicGameDataNode.StatusNum],
+				GameStatusName:                  gameStatusNameMappins[boxscoreOld.BasicGameDataNode.StatusNum],
 				Attendance:                      attendance,
 				SeasonStartYear:                 boxscoreOld.BasicGameDataNode.SeasonYear,
-				SeasonStageName:                 seasonStageNameMappings[int(boxscoreOld.BasicGameDataNode.SeasonStage)],
+				SeasonStageName:                 seasonStageNameMappins[int(boxscoreOld.BasicGameDataNode.SeasonStage)],
 				Period:                          boxscoreOld.BasicGameDataNode.PeriodNode.CurrentPeriod,
 				PeriodTimeRemainingTenthSeconds: periodTimeRemainingTenthSeconds,
 				DurationSeconds: sql.NullInt64{
 					Int64: int64(durationSeconds),
 					Valid: durationSecondsValid,
 				},
-				StartTime: boxscoreOld.BasicGameDataNode.GameStartTimeUTC,
+				StartTime: boxscoreOld.BasicGameDataNode.GameStartTimeUTC.Time,
 				EndTime:   endTime,
 				NBAGameID: boxscoreOld.BasicGameDataNode.GameID,
 			}
@@ -199,13 +218,15 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 				arenaState.Valid = true
 			}
 
-			arenaUpdate := dao.ArenaUpdate{
+			arenaUpdate := arena.ArenaUpdate{
 				NBAArenaID: boxscore.GameNode.Arena.ID,
 				Name:       boxscore.GameNode.Arena.Name,
 				City:       arenaCity,
 				State:      arenaState,
 				Country:    boxscore.GameNode.Arena.Country,
 			}
+
+			log.Info("queueing arena update: ", arenaUpdate)
 
 			arenaUpdates = append(arenaUpdates, arenaUpdate)
 
@@ -216,14 +237,14 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 					log.Printf("could not convert nba official id: %d jersey: %s\n", boxscoreOfficial.PersonID, boxscoreOfficial.JerseyNumber)
 				}
 
-				refereeUpdate := dao.RefereeUpdate{
+				refereeUpdate := referee.RefereeUpdate{
 					NBARefereeID: boxscoreOfficial.PersonID,
 					FirstName:    boxscoreOfficial.FirstName,
 					LastName:     boxscoreOfficial.LastName,
 					JerseyNumber: jerseyNumber,
 				}
 
-				gameRefereeUpdate := dao.GameRefereeUpdate{
+				gameRefereeUpdate := game_referee.GameRefereeUpdate{
 					NBAGameID:    boxscore.GameNode.GameID,
 					NBARefereeID: boxscoreOfficial.PersonID,
 					Assignment:   boxscoreOfficial.Assignment,
@@ -240,7 +261,7 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 				sellout = false
 			}
 
-			gameUpdate := dao.GameUpdate{
+			gameUpdate := GameUpdate{
 				NBAHomeTeamID: boxscore.GameNode.HomeTeam.ID,
 				NBAAwayTeamID: boxscore.GameNode.AwayTeam.ID,
 				HomeTeamPoints: sql.NullInt64{
@@ -251,7 +272,7 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 					Int64: int64(boxscore.GameNode.AwayTeam.Points),
 					Valid: true,
 				},
-				GameStatusName:                  gameStatusNameMappings[boxscore.GameNode.GameStatus],
+				GameStatusName:                  gameStatusNameMappins[boxscore.GameNode.GameStatus],
 				NBAArenaID:                      boxscore.GameNode.Arena.ID,
 				Attendance:                      boxscore.GameNode.Attendance,
 				Sellout:                         sellout,
@@ -259,7 +280,7 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 				PeriodTimeRemainingTenthSeconds: boxscore.GameNode.GameClock.Duration,
 				DurationSeconds:                 boxscore.GameNode.TotalDurationMinutes * 60,
 				RegulationPeriods:               boxscore.GameNode.RegulationPeriods,
-				StartTime:                       boxscore.GameNode.GameTimeUTC,
+				StartTime:                       boxscore.GameNode.GameTimeUTC.Time,
 				NBAGameID:                       boxscore.GameNode.GameID,
 			}
 
@@ -267,20 +288,24 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 		}
 	}
 
-	_, err = gs.RefereeService.UpdateReferees(refereeUpdates)
+	_, err = s.RefereeService.UpdateReferees(refereeUpdates)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("updated referees")
 
-	_, err = gs.ArenaService.UpdateArenas(arenaUpdates)
+	_, err = s.ArenaService.UpdateArenas(arenaUpdates)
 	if err != nil {
+		log.WithError(err).Error("failed to update arenas")
 		return nil, err
 	}
+	log.Info("updated arenas")
 
-	updatedGamesOld, err := gs.GameDAO.UpdateGamesOld(gameUpdatesOld)
+	updatedGamesOld, err := s.GameStore.UpdateGamesOld(gameUpdatesOld)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("updated games old")
 
 	updateGamesMap := map[string]api.Game{}
 
@@ -288,10 +313,11 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 		updateGamesMap[updatedGame.ID] = updatedGame
 	}
 
-	updatedGamesDetailed, err := gs.GameDAO.UpdateGames(gameUpdates)
+	updatedGamesDetailed, err := s.GameStore.UpdateGames(gameUpdates)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("updated games detailed")
 
 	for _, updatedGame := range updatedGamesDetailed {
 		updateGamesMap[updatedGame.ID] = updatedGame
@@ -303,23 +329,16 @@ func (gs GameService) UpdateGames(seasonStartYear int) ([]api.Game, error) {
 		updatedGames = append(updatedGames, updatedGame)
 	}
 
-	err = gs.GameRefereeService.UpdateGameReferees(gameRefereeUpdates)
+	err = s.GameRefereeService.UpdateGameReferees(gameRefereeUpdates)
 	if err != nil {
 		return nil, err
 	}
+	log.Info("updated game referees")
 
 	return updatedGames, nil
 }
 
-func (gs GameService) nbaGameStatusNameMappings() map[int]string {
-	return map[int]string{
-		1: "scheduled",
-		2: "started",
-		3: "completed",
-	}
-}
-
-func (gs GameService) getSeasonLeagueScheduleFromNBAAPI(seasonStartYear int) ([]nba.Game, error) {
+func (s *service) getSeasonLeagueScheduleFromNBAAPI(seasonStartYear int) ([]nba.Game, error) {
 	nbaGames, err := nba.GetSeasonLeagueSchedule(seasonStartYear)
 	if err != nil {
 		return nil, err

@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"log"
 	"math"
 	"net/http"
 	"os"
@@ -15,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/util"
 )
@@ -28,7 +28,7 @@ type Boxscore struct {
 	GameNode struct {
 		GameID               string                        `json:"gameId"`
 		GameTimeLocal        string                        `json:"gameTimeLocal"` // ex. 2021-07-14T20:00:00-05:00
-		GameTimeUTC          time.Time                     `json:"gameTimeUTC"`
+		GameTimeUTC          datetime                      `json:"gameTimeUTC"`
 		GameTimeHome         string                        `json:"gameTimeHome"`      // ex. 2021-07-14T20:00:00-05:00
 		GameTimeAway         string                        `json:"gameTimeAway"`      // ex. 2021-07-14T20:00:00-07:00
 		GameET               string                        `json:"gameEt"`            // ex. 2021-07-14T20:00:00-04:00
@@ -313,7 +313,7 @@ type BoxscoreOld struct {
 		GameIsActivated      bool              `json:"isGameActivated"` // see UpdateTeamsRegularSeasonRecords
 		GameStartTimeEastern string            `json:"startTimeEastern"`
 		GameStartDateEastern string            `json:"startDateEastern"`
-		GameStartTimeUTC     time.Time         `json:"startTimeUTC"`
+		GameStartTimeUTC     datetime          `json:"startTimeUTC"`
 		GameEndTimeUTC       *time.Time        `json:"endTimeUTC,omitempty"`
 		HomeTeamInfo         TeamBoxscoreInfo  `json:"hTeam"`
 		AwayTeamInfo         TeamBoxscoreInfo  `json:"vTeam"`
@@ -1370,13 +1370,23 @@ func GetOldBoxscore(gameID, gameDate string, seasonStartYear int) (BoxscoreOld, 
 			return BoxscoreOld{}, err
 		}
 
+		if response.StatusCode != 200 {
+			return BoxscoreOld{}, fmt.Errorf("could not get boxscore old for gameID: %s got status code: %d", gameID, response.StatusCode)
+		}
+
 		reqBody, err = ioutil.ReadAll(response.Body)
 		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscoreResult)
 		if err != nil {
 			return BoxscoreOld{}, err
 		}
 
-		io.Copy(file, bytes.NewReader(reqBody))
+		n, err := file.Write(reqBody)
+		if err != nil {
+			return BoxscoreOld{}, err
+		}
+		if n == 0 {
+			return BoxscoreOld{}, fmt.Errorf("wrote nothing to file for BoxscoreOld for gameID: %d", gameID)
+		}
 	}
 
 	return boxscoreResult, nil
@@ -1389,7 +1399,7 @@ func GetBoxscoreDetailed(gameID string, seasonStartYear int) (Boxscore, error) {
 	if err := os.MkdirAll(filepath.Dir(filename), 0770); err != nil {
 		return Boxscore{}, err
 	}
-	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0666)
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return Boxscore{}, err
 	}
@@ -1427,13 +1437,24 @@ func GetBoxscoreDetailed(gameID string, seasonStartYear int) (Boxscore, error) {
 			return Boxscore{}, err
 		}
 
+		if response.StatusCode != 200 {
+			return Boxscore{}, fmt.Errorf("could not get boxscore detailed for gameID: %s got status code: %d", gameID, response.StatusCode)
+		}
+
 		reqBody, err = ioutil.ReadAll(response.Body)
 		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscore)
 		if err != nil {
 			return Boxscore{}, err
 		}
 
-		io.Copy(file, bytes.NewReader(reqBody))
+		n, err := file.Write(reqBody)
+		if err != nil {
+			return Boxscore{}, err
+		}
+		if n == 0 {
+			return Boxscore{}, fmt.Errorf("wrote nothing to file for BoxscoreDetailed for gameID: %d", gameID)
+		}
+		log.Infof("wrote %d bytes to file %s", n, filename)
 	}
 
 	return boxscore, nil

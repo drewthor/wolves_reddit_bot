@@ -3,8 +3,9 @@ package gcloud
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"cloud.google.com/go/datastore"
 )
@@ -24,7 +25,7 @@ func (d *Datastore) initClient() {
 	if d.dsClient == nil {
 		client, err := datastore.NewClient(d.ctx, projectID)
 		if err != nil {
-			log.Println(err)
+			log.Error(err)
 			log.Fatal("failed to create datastore client")
 		}
 		d.dsClient = client
@@ -56,7 +57,7 @@ func (d *Datastore) GetTeamGameEvent(gameID, teamID string) (TeamGameEvent, bool
 	key := datastore.NameKey(projectKey, keyName, nil)
 	if err := d.dsClient.Get(d.ctx, key, &gameEvent); err != nil {
 		log.Println(fmt.Sprintf("failed to get TeamGameEvent with ID: %s", keyName))
-		log.Println(err)
+		log.Error(err)
 		return gameEvent, false
 	}
 	return gameEvent, true
@@ -70,7 +71,7 @@ func (d *Datastore) SaveTeamGameEvent(gameEvent TeamGameEvent) {
 	key := datastore.NameKey(projectKey, keyName, nil)
 	if _, err := d.dsClient.Put(d.ctx, key, &gameEvent); err != nil {
 		log.Println("failed to save TeamGameEvent")
-		log.Println(err)
+		log.Error(err)
 	}
 	log.Println("saved TeamGameEvent")
 	log.Println(keyName)

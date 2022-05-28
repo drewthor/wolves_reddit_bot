@@ -1,16 +1,25 @@
-package dao
+package arena
 
 import (
 	"context"
 	"database/sql"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type ArenaDAO struct {
+type Store interface {
+	UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
@@ -22,8 +31,10 @@ type ArenaUpdate struct {
 	Country    string
 }
 
-func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
-	tx, err := ad.DB.Begin(context.Background())
+func (s *store) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
+	log.Info("updating arenas")
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err
@@ -53,6 +64,8 @@ func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
 			arena.NBAArenaID)
 	}
 
+	log.Info("queued arenas for insert")
+
 	batchResults := tx.SendBatch(context.Background(), bp)
 
 	insertedArenas := []api.Arena{}
@@ -69,6 +82,7 @@ func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
 			&arena.CreatedAt,
 			&arena.UpdatedAt)
 
+		log.WithError(err).Info("inserted arena")
 		if err != nil {
 			return nil, err
 		}
@@ -78,11 +92,13 @@ func (ad *ArenaDAO) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
 
 	err = batchResults.Close()
 	if err != nil {
+		log.WithError(err).Error("could not close batchResults when updating arenas")
 		return nil, err
 	}
 
 	err = tx.Commit(context.Background())
 	if err != nil {
+		log.WithError(err).Error("could not commit transaction when updating arenas")
 		return nil, err
 	}
 

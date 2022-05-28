@@ -2,9 +2,9 @@ package nba
 
 import (
 	"fmt"
-	"log"
 	"sort"
-	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Game struct {
@@ -12,7 +12,7 @@ type Game struct {
 	SeasonStage      seasonStage       `json:"seasonStageId"`
 	Status           int               `json:"statusNum"`
 	StartDateEastern string            `json:"startDateEastern"`
-	StartTimeUTC     time.Time         `json:"startTimeUTC"`
+	StartTimeUTC     datetime          `json:"startTimeUTC"`
 	PlayoffsNode     *PlayoffsGameInfo `json:"playoffs,omitempty"`
 	HomeTeam         TeamGameInfo      `json:"hTeam"`
 	AwayTeam         TeamGameInfo      `json:"vTeam"`

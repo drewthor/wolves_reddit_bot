@@ -1,14 +1,23 @@
-package dao
+package team_game_stats
 
 import (
 	"context"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type TeamGameStatsTotalDAO struct {
+type Store interface {
+	UpdateTeamGameStatsTotals(teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdate) ([]TeamGameStatsTotal, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
@@ -61,8 +70,9 @@ type TeamGameStatsTotal struct {
 	TotalRebounds          int
 }
 
-func (tgstd *TeamGameStatsTotalDAO) UpdateTeamGameStatsTotals(teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdate) ([]TeamGameStatsTotal, error) {
-	tx, err := tgstd.DB.Begin(context.Background())
+func (s *store) UpdateTeamGameStatsTotals(teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdate) ([]TeamGameStatsTotal, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err

@@ -1,15 +1,24 @@
-package dao
+package referee
 
 import (
 	"context"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type RefereeDAO struct {
+type Store interface {
+	UpdateReferees(refereeUpdates []RefereeUpdate) ([]api.Referee, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
@@ -20,8 +29,9 @@ type RefereeUpdate struct {
 	JerseyNumber int
 }
 
-func (rd *RefereeDAO) UpdateReferees(refereeUpdates []RefereeUpdate) ([]api.Referee, error) {
-	tx, err := rd.DB.Begin(context.Background())
+func (s *store) UpdateReferees(refereeUpdates []RefereeUpdate) ([]api.Referee, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err

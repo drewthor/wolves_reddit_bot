@@ -1,20 +1,33 @@
-package service
+package team
 
 import (
 	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
-	"github.com/drewthor/wolves_reddit_bot/dao"
+	"github.com/drewthor/wolves_reddit_bot/internal/team_season"
 )
 
-type TeamService struct {
-	TeamDAO           *dao.TeamDAO
-	TeamSeasonService *TeamSeasonService
+type Service interface {
+	Get(teamID string) (api.Team, error)
+	GetAll() ([]api.Team, error)
+	UpdateTeams(seasonStartYear int) ([]api.Team, error)
 }
 
-func (ts TeamService) Get(teamID string) (api.Team, error) {
-	team, err := ts.TeamDAO.Get(teamID)
+func NewService(teamStore Store, teamSeasonService team_season.Service) Service {
+	return &service{
+		TeamStore:         teamStore,
+		TeamSeasonService: teamSeasonService,
+	}
+}
+
+type service struct {
+	TeamStore         Store
+	TeamSeasonService team_season.Service
+}
+
+func (s *service) Get(teamID string) (api.Team, error) {
+	team, err := s.TeamStore.Get(teamID)
 	if err != nil {
 		return api.Team{}, err
 	}
@@ -22,8 +35,8 @@ func (ts TeamService) Get(teamID string) (api.Team, error) {
 	return team, err
 }
 
-func (ts TeamService) GetAll() ([]api.Team, error) {
-	teams, err := ts.TeamDAO.GetAll()
+func (s *service) GetAll() ([]api.Team, error) {
+	teams, err := s.TeamStore.GetAll()
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +44,7 @@ func (ts TeamService) GetAll() ([]api.Team, error) {
 	return teams, err
 }
 
-func (ts TeamService) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
+func (s *service) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 	nbaTeams, err := nba.GetTeamsForSeason(seasonStartYear)
 	if err != nil {
 		return nil, err
@@ -39,14 +52,14 @@ func (ts TeamService) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 
 	nbaTeamIDTeamMappings := map[int]nba.Team{}
 
-	teamUpdates := []dao.TeamUpdate{}
+	teamUpdates := []TeamUpdate{}
 	for _, nbaTeam := range nbaTeams {
 		teamID, err := strconv.Atoi(nbaTeam.ID)
 		if err != nil {
 			return nil, err
 		}
 
-		teamUpdates = append(teamUpdates, dao.TeamUpdate{
+		teamUpdates = append(teamUpdates, TeamUpdate{
 			Name:          nbaTeam.FullName,
 			Nickname:      nbaTeam.Nickname,
 			City:          nbaTeam.City,
@@ -61,7 +74,7 @@ func (ts TeamService) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 
 	teamIDNBATeamMappings := map[string]nba.Team{}
 
-	updatedTeams, err := ts.TeamDAO.UpdateTeams(teamUpdates)
+	updatedTeams, err := s.TeamStore.UpdateTeams(teamUpdates)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +83,7 @@ func (ts TeamService) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 		teamIDNBATeamMappings[updatedTeam.ID] = nbaTeamIDTeamMappings[updatedTeam.NBATeamID]
 	}
 
-	_, err = ts.TeamSeasonService.UpdateTeamSeasons(teamIDNBATeamMappings, seasonStartYear)
+	_, err = s.TeamSeasonService.UpdateTeamSeasons(teamIDNBATeamMappings, seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
@@ -79,8 +92,8 @@ func (ts TeamService) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 }
 
 // get a mapping from nba team id -> db team id
-func (ts TeamService) NBATeamIDMappings() (map[string]string, error) {
-	nbaTeamIDMappings, err := ts.TeamDAO.NBATeamIDMappings()
+func (s *service) NBATeamIDMappings() (map[string]string, error) {
+	nbaTeamIDMappings, err := s.TeamStore.NBATeamIDMappings()
 	if err != nil {
 		return nil, err
 	}

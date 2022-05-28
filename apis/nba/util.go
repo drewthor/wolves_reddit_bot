@@ -2,9 +2,10 @@ package nba
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const nbaAPIBaseURI = "http://data.nba.net"
@@ -28,7 +29,7 @@ func makeURIFormattable(uri string) string {
 func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) time.Time {
 	eastCoastLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 	}
 
 	// add space between time zone and year to help parser
@@ -44,7 +45,7 @@ func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) time.Time 
 	time, err := time.ParseInLocation(APIFormat, combinedAPIData, eastCoastLocation)
 	if err != nil {
 		log.Println(fmt.Sprintf("combined API game time: %s", combinedAPIData))
-		log.Println(err)
+		log.Error(err)
 	}
 
 	return time

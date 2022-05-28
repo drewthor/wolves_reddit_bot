@@ -1,15 +1,24 @@
-package dao
+package game_referee
 
 import (
 	"context"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type GameRefereeDAO struct {
+type Store interface {
+	UpdateGameReferees(gameRefereeUpdates []GameRefereeUpdate) ([]GameReferee, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
@@ -27,8 +36,9 @@ type GameReferee struct {
 	UpdatedAt  *time.Time
 }
 
-func (grd *GameRefereeDAO) UpdateGameReferees(gameRefereeUpdates []GameRefereeUpdate) ([]GameReferee, error) {
-	tx, err := grd.DB.Begin(context.Background())
+func (s *store) UpdateGameReferees(gameRefereeUpdates []GameRefereeUpdate) ([]GameReferee, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err

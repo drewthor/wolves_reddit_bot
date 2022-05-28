@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // newer league schedule but not sure if you can find by year https://cdn.nba.com/static/json/staticData/scheduleLeagueV2.json
@@ -27,14 +28,14 @@ func GetCurrentLeagueSchedule(leageSchedulePath string) ([]Game, error) {
 	}()
 
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return nil, err
 	}
 
 	leagueScheduleResult := LeagueSchedule{}
 	err = json.NewDecoder(response.Body).Decode(&leagueScheduleResult)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return nil, err
 	}
 
@@ -51,14 +52,14 @@ func GetSeasonLeagueSchedule(seasonStartYear int) ([]Game, error) {
 	}()
 
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return nil, err
 	}
 
 	leagueScheduleResult := LeagueSchedule{}
 	err = json.NewDecoder(response.Body).Decode(&leagueScheduleResult)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return nil, err
 	}
 

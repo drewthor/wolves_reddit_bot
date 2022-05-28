@@ -1,12 +1,18 @@
 package nba
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 )
+
+var NBACurrentSeasonStartYear = -1
 
 const NBADailyAPIPath = "/prod/v1/today.json"
 
@@ -27,22 +33,39 @@ type DailyAPI struct {
 }
 
 type DailyAPIPaths struct {
-	Boxscore                  string `json:"boxscore"`                 // e.g. "/prod/v1/{{gameDate}}/{{gameId}}_boxscore.json"
-	CurrentDate               string `json:"currentDate"`              // e.g. "20210704"
-	Players                   string `json:"leagueRosterPlayers"`      // e.g. "/prod/v1/2020/players.json"
-	Scoreboard                string `json:"scoreboard"`               // e.g. "/prod/v2/{{gameDate}}/scoreboard.json"
-	Teams                     string `json:"teams"`                    // e.g. "/prod/v2/2020/teams.json"
-	TeamSchedule              string `json:"teamSchedule"`             // e.g. "/prod/v1/2020/teams/{{teamUrlCode}}/schedule.json"
-	LeagueSchedule            string `json:"leagueSchedule"`           // e.g. "/prod/v1/2020/schedule.json"
-	Coaches                   string `json:"leagueRosterCoaches"`      // e.g. "/prod/v1/2020/coaches.json"
-	TeamHomeICalendarDownload string `json:"teamICS"`                  // e.g. "/prod/teams/schedules/2020/{{teamUrlCode}}_home_schedule.ics"
-	TeamAllICalendarDownload  string `json:"teamICS2"`                 // e.g. "/prod/teams/schedules/2020/{{teamUrlCode}}_schedule.ics"
-	PeriodPlayByPlay          string `json:"pbp"`                      // e.g. "/prod/v1/{{gameDate}}/{{gameId}}_pbp_{{periodNum}}.json"
-	PlayerGameLog             string `json:"playerGameLog"`            // e.g. "/prod/v1/2020/players/{{personId}}_gamelog.json"
-	PlayerProfile             string `json:"playerProfile"`            // e.g. "/prod/v1/2020/players/{{personId}}_profile.json" - cumulative player stats by year
-	LeagueConferenceStandings string `json:"leagueConfStandings"`      // e.g. "/prod/v1/current/standings_conference.json"
-	LeagueDivisionStandings   string `json:"leagueDivStandings"`       // e.g. "/prod/v1/current/standings_division.json"
-	LeagueStandings           string `json:"leagueUngroupedStandings"` // e.g. "/prod/v1/current/standings_all.json"
+	Boxscore                  string      `json:"boxscore"`                 // e.g. "/prod/v1/{{gameDate}}/{{gameId}}_boxscore.json"
+	CurrentDate               currentDate `json:"currentDate"`              // e.g. "20210704"
+	Players                   string      `json:"leagueRosterPlayers"`      // e.g. "/prod/v1/2020/players.json"
+	Scoreboard                string      `json:"scoreboard"`               // e.g. "/prod/v2/{{gameDate}}/scoreboard.json"
+	Teams                     string      `json:"teams"`                    // e.g. "/prod/v2/2020/teams.json"
+	TeamSchedule              string      `json:"teamSchedule"`             // e.g. "/prod/v1/2020/teams/{{teamUrlCode}}/schedule.json"
+	LeagueSchedule            string      `json:"leagueSchedule"`           // e.g. "/prod/v1/2020/schedule.json"
+	Coaches                   string      `json:"leagueRosterCoaches"`      // e.g. "/prod/v1/2020/coaches.json"
+	TeamHomeICalendarDownload string      `json:"teamICS"`                  // e.g. "/prod/teams/schedules/2020/{{teamUrlCode}}_home_schedule.ics"
+	TeamAllICalendarDownload  string      `json:"teamICS2"`                 // e.g. "/prod/teams/schedules/2020/{{teamUrlCode}}_schedule.ics"
+	PeriodPlayByPlay          string      `json:"pbp"`                      // e.g. "/prod/v1/{{gameDate}}/{{gameId}}_pbp_{{periodNum}}.json"
+	PlayerGameLog             string      `json:"playerGameLog"`            // e.g. "/prod/v1/2020/players/{{personId}}_gamelog.json"
+	PlayerProfile             string      `json:"playerProfile"`            // e.g. "/prod/v1/2020/players/{{personId}}_profile.json" - cumulative player stats by year
+	LeagueConferenceStandings string      `json:"leagueConfStandings"`      // e.g. "/prod/v1/current/standings_conference.json"
+	LeagueDivisionStandings   string      `json:"leagueDivStandings"`       // e.g. "/prod/v1/current/standings_division.json"
+	LeagueStandings           string      `json:"leagueUngroupedStandings"` // e.g. "/prod/v1/current/standings_all.json"
+}
+
+type currentDate struct {
+	Time time.Time
+}
+
+func (c *currentDate) UnmarshalJSON(data []byte) error {
+	raw := ""
+	err := json.NewDecoder(bytes.NewReader(data)).Decode(&raw)
+	if err != nil {
+		return fmt.Errorf("could not unmarshal nba current date: %s to time.Time error: %w", string(data), err)
+	}
+	c.Time, err = time.Parse("20060102", raw)
+	if err != nil {
+	}
+
+	return nil
 }
 
 func GetDailyAPIPaths() DailyAPI {
@@ -63,8 +86,16 @@ func GetDailyAPIPaths() DailyAPI {
 	if decodeErr != nil {
 		log.Fatal(decodeErr)
 	}
-	if dailyAPIResult.APIPaths.CurrentDate == "" || dailyAPIResult.APIPaths.Teams == "" || dailyAPIResult.APIPaths.TeamSchedule == "" || dailyAPIResult.APIPaths.Scoreboard == "" {
+	if dailyAPIResult.APIPaths.CurrentDate.Time.IsZero() || dailyAPIResult.APIPaths.Teams == "" || dailyAPIResult.APIPaths.TeamSchedule == "" || dailyAPIResult.APIPaths.Scoreboard == "" {
 		log.Fatal("Could not get daily API paths")
 	}
 	return dailyAPIResult
+}
+
+func SetCurrentSeasonStartYear(startYear int) {
+	NBACurrentSeasonStartYear = startYear
+}
+
+func init() {
+	NBACurrentSeasonStartYear = GetDailyAPIPaths().APISeasonInfoNode.SeasonYear
 }

@@ -1,42 +1,51 @@
-package service
+package player
 
 import (
-	"log"
 	"strconv"
 	"time"
 
-	"github.com/drewthor/wolves_reddit_bot/dao"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 )
 
-type PlayerService struct {
-	PlayerDAO *dao.PlayerDAO
+type Service interface {
+	Get(playerID string) (api.Player, error)
+	GetAll() ([]api.Player, error)
+	UpdatePlayers(seasonStartYear int) ([]api.Player, error)
 }
 
-func (ps PlayerService) Get(playerID string) (api.Player, error) {
-	player, err := ps.PlayerDAO.Get(playerID)
+func NewService(playerStore Store) Service {
+	return &service{PlayerStore: playerStore}
+}
+
+type service struct {
+	PlayerStore Store
+}
+
+func (s *service) Get(playerID string) (api.Player, error) {
+	player, err := s.PlayerStore.Get(playerID)
 	if err != nil {
 		return player, err
 	}
 	return player, nil
 }
 
-func (ps PlayerService) GetAll() ([]api.Player, error) {
-	players, err := ps.PlayerDAO.GetAll()
+func (s *service) GetAll() ([]api.Player, error) {
+	players, err := s.PlayerStore.GetAll()
 	if err != nil {
 		return nil, err
 	}
 	return players, nil
 }
 
-func (ps PlayerService) UpdatePlayers(seasonStartYear int) ([]api.Player, error) {
-	players, err := ps.getSeasonPlayers(seasonStartYear)
+func (s *service) UpdatePlayers(seasonStartYear int) ([]api.Player, error) {
+	players, err := s.getSeasonPlayers(seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
-	updatedPlayers, err := ps.PlayerDAO.UpdatePlayers(players)
+	updatedPlayers, err := s.PlayerStore.UpdatePlayers(players)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +53,7 @@ func (ps PlayerService) UpdatePlayers(seasonStartYear int) ([]api.Player, error)
 	return updatedPlayers, nil
 }
 
-func (ps PlayerService) getSeasonPlayers(seasonStartYear int) ([]api.Player, error) {
+func (s *service) getSeasonPlayers(seasonStartYear int) ([]api.Player, error) {
 	nbaPlayers, err := nba.GetPlayers(seasonStartYear)
 
 	if err != nil {

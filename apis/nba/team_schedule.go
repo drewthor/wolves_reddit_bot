@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type TeamSchedule struct {
@@ -28,19 +29,19 @@ func GetCurrentTeamSchedule(teamAPIPath, teamID string) (GamesByStartDate, error
 	}()
 
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return nil, err
 	}
 
 	teamScheduleResult := TeamSchedule{}
 	err = json.NewDecoder(response.Body).Decode(&teamScheduleResult)
 	if err != nil {
-		log.Println(err)
+		log.Error(err)
 		return nil, err
 	}
 	scheduledGameMap := map[string]Game{}
 	for _, scheduledGame := range teamScheduleResult.LeagueNode.Games {
-		if scheduledGame.StartDateEastern != "" && scheduledGame.StartTimeUTC.Equal(time.Time{}) && scheduledGame.GameID != "" {
+		if scheduledGame.StartDateEastern != "" && scheduledGame.StartTimeUTC.Time.Equal(time.Time{}) && scheduledGame.GameID != "" {
 			scheduledGameMap[scheduledGame.StartDateEastern] = scheduledGame
 		}
 	}

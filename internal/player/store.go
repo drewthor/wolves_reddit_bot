@@ -1,8 +1,9 @@
-package dao
+package player
 
 import (
 	"context"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/jackc/pgx/v4"
 
@@ -10,11 +11,22 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type PlayerDAO struct {
+type Store interface {
+	Get(playerID string) (api.Player, error)
+	GetAll() ([]api.Player, error)
+	GetByIDs(ids []string) ([]api.Player, error)
+	UpdatePlayers(players []api.Player) ([]api.Player, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
-func (pd *PlayerDAO) Get(playerID string) (api.Player, error) {
+func (s *store) Get(playerID string) (api.Player, error) {
 	player := api.Player{}
 
 	query := `
@@ -30,7 +42,7 @@ func (pd *PlayerDAO) Get(playerID string) (api.Player, error) {
         ) positions
 		WHERE p.id = $1`
 
-	err := pd.DB.QueryRow(context.Background(), query, playerID).Scan(
+	err := s.DB.QueryRow(context.Background(), query, playerID).Scan(
 		&player.ID,
 		&player.FirstName,
 		&player.LastName,
@@ -56,7 +68,7 @@ func (pd *PlayerDAO) Get(playerID string) (api.Player, error) {
 	return player, nil
 }
 
-func (pd *PlayerDAO) GetAll() ([]api.Player, error) {
+func (s *store) GetAll() ([]api.Player, error) {
 	query := `
 		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, currently_in_nba, years_pro, nba_debut_year, nba_player_id, country, time_created, time_modified 
 		FROM nba.player p, LATERAL (
@@ -69,7 +81,7 @@ func (pd *PlayerDAO) GetAll() ([]api.Player, error) {
                 ) as pos_array
         ) positions`
 
-	rows, err := pd.DB.Query(context.Background(), query)
+	rows, err := s.DB.Query(context.Background(), query)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +118,7 @@ func (pd *PlayerDAO) GetAll() ([]api.Player, error) {
 	return players, nil
 }
 
-func (pd *PlayerDAO) GetByIDs(ids []string) ([]api.Player, error) {
+func (s *store) GetByIDs(ids []string) ([]api.Player, error) {
 	query := `
 		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, currently_in_nba, years_pro, nba_debut_year, nba_player_id, country, time_created, time_modified 
 		FROM nba.player p, LATERAL (
@@ -120,7 +132,7 @@ func (pd *PlayerDAO) GetByIDs(ids []string) ([]api.Player, error) {
         ) positions
 		WHERE id = ANY($1)`
 
-	rows, err := pd.DB.Query(context.Background(), query, ids)
+	rows, err := s.DB.Query(context.Background(), query, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -157,8 +169,9 @@ func (pd *PlayerDAO) GetByIDs(ids []string) ([]api.Player, error) {
 	return players, nil
 }
 
-func (pd *PlayerDAO) UpdatePlayers(players []api.Player) ([]api.Player, error) {
-	tx, err := pd.DB.Begin(context.Background())
+func (s *store) UpdatePlayers(players []api.Player) ([]api.Player, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err
@@ -262,5 +275,5 @@ func (pd *PlayerDAO) UpdatePlayers(players []api.Player) ([]api.Player, error) {
 		return nil, err
 	}
 
-	return pd.GetByIDs(insertedPlayerIDs)
+	return s.GetByIDs(insertedPlayerIDs)
 }

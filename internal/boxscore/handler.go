@@ -1,28 +1,35 @@
-package controller
+package boxscore
 
 import (
 	"net/http"
 
-	"github.com/go-chi/chi"
-
 	"github.com/drewthor/wolves_reddit_bot/util"
-
-	"github.com/drewthor/wolves_reddit_bot/service"
+	"github.com/go-chi/chi"
+	log "github.com/sirupsen/logrus"
 )
 
-type BoxscoreController struct {
-	BoxscoreService *service.BoxscoreService
+type Handler interface {
+	Routes() chi.Router
+	Get(w http.ResponseWriter, r *http.Request)
 }
 
-func (bc BoxscoreController) Routes() chi.Router {
+func NewHandler(boxscoreService Service) Handler {
+	return &handler{BoxscoreService: boxscoreService}
+}
+
+type handler struct {
+	BoxscoreService Service
+}
+
+func (h *handler) Routes() chi.Router {
 	r := chi.NewRouter()
 
-	r.Get("/", bc.Get)
+	r.Get("/", h.Get)
 
 	return r
 }
 
-func (bc BoxscoreController) Get(w http.ResponseWriter, r *http.Request) {
+func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	gameID := chi.URLParam(r, "gameID")
 	gameDate := r.FormValue("game_date")
@@ -37,8 +44,9 @@ func (bc BoxscoreController) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	boxscore, err := bc.BoxscoreService.Get(gameID, gameDate)
+	boxscore, err := h.BoxscoreService.Get(gameID, gameDate)
 	if err != nil {
+		log.Error(err)
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

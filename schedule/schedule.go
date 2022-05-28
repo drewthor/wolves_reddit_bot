@@ -2,8 +2,9 @@ package schedule
 
 import (
 	"fmt"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 
@@ -16,8 +17,14 @@ func NewScheduler() *gocron.Scheduler {
 	s.TagsUnique()
 
 	s.Every(5).Minutes().Do(getTodaysGamesAndAddToJobs, s)
+	s.Every(12).Hours().Do(updateSeasonStartYear)
 
 	return s
+}
+
+func updateSeasonStartYear() {
+	startYear := nba.GetDailyAPIPaths().APISeasonInfoNode.SeasonYear
+	nba.SetCurrentSeasonStartYear(startYear)
 }
 
 func getTodaysGamesAndAddToJobs(s *gocron.Scheduler) {
@@ -34,7 +41,7 @@ func getTodaysGamesAndAddToJobs(s *gocron.Scheduler) {
 
 func getGameData(s *gocron.Scheduler, gameID, gameDate string) {
 	log.Println("Getting game data for game: ", gameID, " for gameDate: ", gameDate)
-	boxscore, err := nba.GetBoxscoreDetailed(gameID, time.Now().Year())
+	boxscore, err := nba.GetBoxscoreDetailed(gameID, nba.NBACurrentSeasonStartYear)
 	if err != nil {
 		log.Println(fmt.Sprintf("could not retrieve detailed boxscore for gameID: %s", gameID), err)
 	}
@@ -45,7 +52,7 @@ func getGameData(s *gocron.Scheduler, gameID, gameDate string) {
 
 	if boxscore.Final() {
 		log.Println("scheduler length before removing: ", s.Len())
-		log.Println("removing shceduled job with tag: ", gameID)
+		log.Println("removing scheduled job with tag: ", gameID)
 		log.Println("scheduler length after removing: ", s.Len())
 		err = s.RemoveByTag(gameID)
 		if err != nil {

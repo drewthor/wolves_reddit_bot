@@ -1,8 +1,9 @@
-package dao
+package team_season
 
 import (
 	"context"
-	"log"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 
@@ -10,7 +11,16 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type TeamSeasonDAO struct {
+type Store interface {
+	GetByIDs(teamSeasonIDs []string) ([]api.TeamSeason, error)
+	UpdateTeamSeasons(teamSeasonUpdates []TeamSeasonUpdate) ([]api.TeamSeason, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
@@ -22,13 +32,13 @@ type TeamSeasonUpdate struct {
 	DivisionName    string
 }
 
-func (tsd *TeamSeasonDAO) GetByIDs(teamSeasonIDs []string) ([]api.TeamSeason, error) {
+func (s *store) GetByIDs(teamSeasonIDs []string) ([]api.TeamSeason, error) {
 	query := `
 		SELECT ts.id, ts.team_id, ts.league_id, ts.season_id, ts.conference_id, ts.division_id, ts.created_at, ts.updated_at
 		FROM nba.team_season ts
 		WHERE id = ANY($1)`
 
-	rows, err := tsd.DB.Query(context.Background(), query, teamSeasonIDs)
+	rows, err := s.DB.Query(context.Background(), query, teamSeasonIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +65,9 @@ func (tsd *TeamSeasonDAO) GetByIDs(teamSeasonIDs []string) ([]api.TeamSeason, er
 	return teamSeasons, nil
 }
 
-func (tsd *TeamSeasonDAO) UpdateTeamSeasons(teamSeasonUpdates []TeamSeasonUpdate) ([]api.TeamSeason, error) {
-	tx, err := tsd.DB.Begin(context.Background())
+func (s *store) UpdateTeamSeasons(teamSeasonUpdates []TeamSeasonUpdate) ([]api.TeamSeason, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err
@@ -111,5 +122,5 @@ func (tsd *TeamSeasonDAO) UpdateTeamSeasons(teamSeasonUpdates []TeamSeasonUpdate
 		return nil, err
 	}
 
-	return tsd.GetByIDs(insertedTeamSeasonIDs)
+	return s.GetByIDs(insertedTeamSeasonIDs)
 }

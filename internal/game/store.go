@@ -1,21 +1,32 @@
-package dao
+package game
 
 import (
 	"context"
 	"database/sql"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
-type GameDAO struct {
+type Store interface {
+	GetByIDs(ids []string) ([]api.Game, error)
+	UpdateGamesOld(gameUpdates []GameUpdateOld) ([]api.Game, error)
+	UpdateGames(gameUpdates []GameUpdate) ([]api.Game, error)
+}
+
+func NewStore(db *pgxpool.Pool) Store {
+	return &store{DB: db}
+}
+
+type store struct {
 	DB *pgxpool.Pool
 }
 
-func (gd *GameDAO) GetByIDs(ids []string) ([]api.Game, error) {
+func (s *store) GetByIDs(ids []string) ([]api.Game, error) {
 	query := `
 		SELECT id, home_team_id, away_team_id, home_team_points, away_team_points, game_status.name, arena_id, attendance, season.name, season_stage.name, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id, created_at, updated_at
 		FROM nba.game g, 
@@ -36,7 +47,7 @@ func (gd *GameDAO) GetByIDs(ids []string) ([]api.Game, error) {
         ) season_stage
 		WHERE id = ANY($1)`
 
-	rows, err := gd.DB.Query(context.Background(), query, ids)
+	rows, err := s.DB.Query(context.Background(), query, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +119,9 @@ type GameUpdate struct {
 	StartTime                       time.Time
 }
 
-func (gd *GameDAO) UpdateGamesOld(gameUpdates []GameUpdateOld) ([]api.Game, error) {
-	tx, err := gd.DB.Begin(context.Background())
+func (s *store) UpdateGamesOld(gameUpdates []GameUpdateOld) ([]api.Game, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err
@@ -181,11 +193,12 @@ func (gd *GameDAO) UpdateGamesOld(gameUpdates []GameUpdateOld) ([]api.Game, erro
 		return nil, err
 	}
 
-	return gd.GetByIDs(insertedGameIDs)
+	return s.GetByIDs(insertedGameIDs)
 }
 
-func (gd *GameDAO) UpdateGames(gameUpdates []GameUpdate) ([]api.Game, error) {
-	tx, err := gd.DB.Begin(context.Background())
+func (s *store) UpdateGames(gameUpdates []GameUpdate) ([]api.Game, error) {
+	tx, err := s.DB.Begin(context.Background())
+	defer tx.Rollback(context.Background())
 	if err != nil {
 		log.Printf("could not start db transaction with error: %v", err)
 		return nil, err
@@ -257,5 +270,5 @@ func (gd *GameDAO) UpdateGames(gameUpdates []GameUpdate) ([]api.Game, error) {
 		return nil, err
 	}
 
-	return gd.GetByIDs(insertedGameIDs)
+	return s.GetByIDs(insertedGameIDs)
 }

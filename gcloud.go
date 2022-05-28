@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/pkg/gfunctions/gt"
