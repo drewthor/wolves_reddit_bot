@@ -25,7 +25,10 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		log.Fatal(err)
 	}
 	dailyAPIPaths := dailyAPIInfo.APIPaths
-	teams := nba.GetTeams(dailyAPIPaths.Teams)
+	teams, err := nba.GetTeams(dailyAPIPaths.Teams)
+	if err != nil {
+		log.Fatal(err)
+	}
 	var team *nba.Team
 	for _, t := range teams {
 		if t.TriCode == teamTriCode {
