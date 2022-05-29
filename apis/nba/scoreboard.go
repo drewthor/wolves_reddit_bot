@@ -72,7 +72,7 @@ type TeamScoreboard struct {
 	Wins              int     `json:"wins"`
 	Losses            int     `json:"losses"`
 	Score             int     `json:"score"`
-	Seed              *string `json:"seed"`    // ex. null
+	Seed              *int    `json:"seed"`    // ex. null
 	InBonus           *string `json:"inBonus"` // ex. null
 	TimeoutsRemaining int     `json:"timeoutsRemaining"`
 	Periods           []struct {

@@ -61,7 +61,7 @@ func main() {
 		os.Exit(1)
 	}
 	dbConfig.ConnConfig.Logger = logrusadapter.NewLogger(log.StandardLogger())
-	dbConfig.ConnConfig.LogLevel = pgx.LogLevelInfo
+	dbConfig.ConnConfig.LogLevel = pgx.LogLevelWarn
 
 	dbpool, err := pgxpool.ConnectConfig(context.Background(), dbConfig)
 	if err != nil {
