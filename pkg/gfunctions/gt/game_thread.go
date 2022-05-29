@@ -23,9 +23,15 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	currentTimeWestern := currentTimeUTC.In(westCoastLocation)
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
 	log.Println(currentDateWestern)
-	dailyAPIInfo := nba.GetDailyAPIPaths()
+	dailyAPIInfo, err := nba.GetDailyAPIPaths()
+	if err != nil {
+		log.Fatal(err)
+	}
 	dailyAPIPaths := dailyAPIInfo.APIPaths
-	teams := nba.GetTeams(dailyAPIPaths.Teams)
+	teams, err := nba.GetTeams(dailyAPIPaths.Teams)
+	if err != nil {
+		log.Fatal(err)
+	}
 	var team *nba.Team
 	for _, t := range teams {
 		if t.TriCode == teamTriCode {
@@ -52,7 +58,11 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
 		subreddit := "SeattleSockeye"
 
-		if (boxscore.DurationUntilGameStarts().Hours() < 1) && !boxscore.GameEnded() {
+		durationUntilGameStarts, err := boxscore.DurationUntilGameStarts()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if (durationUntilGameStarts.Hours() < 1) && !boxscore.GameEnded() {
 			log.Println("game in progress")
 
 			log.Println("making post")

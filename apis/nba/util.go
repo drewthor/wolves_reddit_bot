@@ -1,7 +1,9 @@
 package nba
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"time"
 
@@ -26,10 +28,12 @@ func makeURIFormattable(uri string) string {
 	return formattedString
 }
 
-func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) time.Time {
+func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) (time.Time, error) {
 	eastCoastLocation, err := time.LoadLocation("America/New_York")
 	if err != nil {
-		log.Error(err)
+		errorMessage := "failed to load new york time location"
+		log.WithError(err).Error(errorMessage)
+		return time.Time{}, fmt.Errorf(errorMessage+" %w", err)
 	}
 
 	// add space between time zone and year to help parser
@@ -42,13 +46,15 @@ func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) time.Time 
 
 	// grab the first match since the NBA time string puts the time zone last
 	combinedAPIData := matches[0] + startDateEastern
-	time, err := time.ParseInLocation(APIFormat, combinedAPIData, eastCoastLocation)
+	parsedTime, err := time.ParseInLocation(APIFormat, combinedAPIData, eastCoastLocation)
 	if err != nil {
-		log.Println(fmt.Sprintf("combined API game time: %s", combinedAPIData))
-		log.Error(err)
+		log.Infof("combined API game time: %s", combinedAPIData)
+		errorMessage := fmt.Sprintf("failed to parse combined API game time: %s in new york time location", combinedAPIData)
+		log.WithError(err).Error(errorMessage)
+		return time.Time{}, fmt.Errorf(errorMessage+" %w", err)
 	}
 
-	return time
+	return parsedTime, nil
 }
 
 // returns a player's string of the form "D. Howard"
@@ -113,3 +119,23 @@ const (
 	UtahJazz              TriCode = "UTA"
 	WashingtonWizards     TriCode = "WAS"
 )
+
+func unmarshalNBAHttpResponseToJSON[T any](reader io.Reader) (T, error) {
+	t := *new(T)
+
+	raw := json.RawMessage{}
+	err := json.NewDecoder(reader).Decode(&raw)
+	if err != nil {
+		errorMessage := "could not decode json body to raw json"
+		log.WithError(err).Error(errorMessage)
+		return t, fmt.Errorf(errorMessage + " %w")
+	}
+	err = json.Unmarshal(raw, &t)
+	if err != nil {
+		errorMessage := fmt.Sprintf("could not decode json to type %T raw: %s", t, raw)
+		log.WithError(err).Error(errorMessage)
+		return t, fmt.Errorf(errorMessage+" %w", err)
+	}
+
+	return t, nil
+}

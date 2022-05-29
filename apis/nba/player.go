@@ -1,13 +1,8 @@
 package nba
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const PlayerHeadshotURL = "https://cdn.nba.com/headshots/nba/latest/260x190/%d.png"
@@ -42,23 +37,14 @@ type Player struct {
 
 func GetPlayers(seasonStartYear int) ([]Player, error) {
 	url := fmt.Sprintf(seasonPlayersURL, seasonStartYear)
-	response, httpErr := http.Get(url)
-
-	defer func() {
-		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
-	}()
-
-	if httpErr != nil {
-		log.Println(httpErr)
-		return nil, httpErr
+	response, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get players for year %d from url %s %w", seasonStartYear, url, err)
 	}
 
-	playersResult := Players{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&playersResult)
-	if decodeErr != nil {
-		log.Println(decodeErr)
-		return nil, decodeErr
+	playersResult, err := unmarshalNBAHttpResponseToJSON[Players](response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get players for year %d from url %s %w", seasonStartYear, url, err)
 	}
 
 	return playersResult.LeagueNode.Players, nil

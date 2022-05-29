@@ -41,7 +41,10 @@ type service struct {
 }
 
 func (s *service) Get(gameDate string) (api.Games, error) {
-	gameScoreboards := nba.GetGameScoreboards(gameDate)
+	gameScoreboards, err := nba.GetGameScoreboards(gameDate)
+	if err != nil {
+		return api.Games{}, err
+	}
 	return api.Games{Games: gameScoreboards.Games}, nil
 }
 

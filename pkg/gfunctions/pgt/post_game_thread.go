@@ -20,7 +20,10 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	}
 	currentTimeWestern := currentTimeUTC.In(westCoastLocation)
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
-	dailyAPIInfo := nba.GetDailyAPIPaths()
+	dailyAPIInfo, err := nba.GetDailyAPIPaths()
+	if err != nil {
+		log.Fatal(err)
+	}
 	dailyAPIPaths := dailyAPIInfo.APIPaths
 	teams := nba.GetTeams(dailyAPIPaths.Teams)
 	var team *nba.Team
@@ -41,7 +44,10 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	log.Println("checked for game")
 	if gameToday {
 		log.Println("game today")
-		todaysGameScoreboard := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateWestern, todaysGame.GameID)
+		todaysGameScoreboard, err := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateWestern, todaysGame.GameID)
+		if err != nil {
+			log.Fatal(err)
+		}
 		boxscore, err := nba.GetCurrentSeasonBoxscore(todaysGame.GameID, currentDateWestern)
 		if err != nil {
 			log.Fatal(err)

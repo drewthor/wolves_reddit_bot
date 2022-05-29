@@ -1,13 +1,8 @@
 package nba
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const TeamsURL = "https://data.nba.net/prod/v2/%d/teams.json"
@@ -41,19 +36,14 @@ type Team struct {
 func GetTeamsForSeason(seasonStartYear int) ([]Team, error) {
 	url := fmt.Sprintf(TeamsURL, seasonStartYear)
 	response, err := http.Get(url)
-
-	if response != nil {
-		defer response.Body.Close()
-	}
-
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
 	}
+	defer response.Body.Close()
 
-	teamsResult := TeamsResult{}
-	err = json.NewDecoder(response.Body).Decode(&teamsResult)
+	teamsResult, err := unmarshalNBAHttpResponseToJSON[TeamsResult](response.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
 	}
 	teams := []Team{}
 	for _, team := range teamsResult.LeagueNode.NBA {
@@ -63,28 +53,22 @@ func GetTeamsForSeason(seasonStartYear int) ([]Team, error) {
 	return teams, nil
 }
 
-func GetTeams(teamsAPIPath string) []Team {
+func GetTeams(teamsAPIPath string) ([]Team, error) {
 	url := nbaAPIBaseURI + teamsAPIPath
-	response, httpErr := http.Get(url)
-
-	defer func() {
-		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
-	}()
-
-	if httpErr != nil {
-		log.Fatal(httpErr)
+	response, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
 	}
+	defer response.Body.Close()
 
-	teamsResult := TeamsResult{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&teamsResult)
-	if decodeErr != nil {
-		log.Fatal(decodeErr)
+	teamsResult, err := unmarshalNBAHttpResponseToJSON[TeamsResult](response.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
 	}
 	teams := []Team{}
 	for _, team := range teamsResult.LeagueNode.NBA {
 		teams = append(teams, team)
 	}
 
-	return teams
+	return teams, nil
 }

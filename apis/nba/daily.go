@@ -4,12 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 var NBACurrentSeasonStartYear = -1
@@ -61,35 +57,30 @@ func (c *currentDate) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("could not unmarshal nba current date: %s to time.Time error: %w", string(data), err)
 	}
-	c.Time, err = time.Parse("20060102", raw)
+	c.Time, err = time.Parse(TimeDayFormat, raw)
 	if err != nil {
+		return fmt.Errorf("could not parse nba current date %s using format %s error: %w", string(data), TimeDayFormat, err)
 	}
 
 	return nil
 }
 
-func GetDailyAPIPaths() DailyAPI {
+func GetDailyAPIPaths() (DailyAPI, error) {
 	url := nbaAPIBaseURI + NBADailyAPIPath
-	response, httpErr := http.Get(url)
-
-	defer func() {
-		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
-	}()
-
-	if httpErr != nil {
-		log.Fatal(httpErr)
+	response, err := http.Get(url)
+	if err != nil {
+		return DailyAPI{}, fmt.Errorf("failed to get nba daily api paths from url %s %w", url, err)
 	}
+	defer response.Body.Close()
 
-	dailyAPIResult := DailyAPI{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&dailyAPIResult)
-	if decodeErr != nil {
-		log.Fatal(decodeErr)
+	dailyAPIResult, err := unmarshalNBAHttpResponseToJSON[DailyAPI](response.Body)
+	if err != nil {
+		return DailyAPI{}, err
 	}
 	if dailyAPIResult.APIPaths.CurrentDate.Time.IsZero() || dailyAPIResult.APIPaths.Teams == "" || dailyAPIResult.APIPaths.TeamSchedule == "" || dailyAPIResult.APIPaths.Scoreboard == "" {
-		log.Fatal("Could not get daily API paths")
+		return DailyAPI{}, fmt.Errorf("could not get nba daily nba API paths, empty json from url %s", url)
 	}
-	return dailyAPIResult
+	return dailyAPIResult, nil
 }
 
 func SetCurrentSeasonStartYear(startYear int) {
@@ -97,5 +88,14 @@ func SetCurrentSeasonStartYear(startYear int) {
 }
 
 func init() {
-	NBACurrentSeasonStartYear = GetDailyAPIPaths().APISeasonInfoNode.SeasonYear
+	dailyAPIPaths, err := GetDailyAPIPaths()
+	if err != nil {
+		currentTime := time.Now()
+		NBACurrentSeasonStartYear = currentTime.Year()
+		if currentTime.Month() < time.July {
+			NBACurrentSeasonStartYear = currentTime.Year() - 1
+		}
+		return
+	}
+	NBACurrentSeasonStartYear = dailyAPIPaths.APISeasonInfoNode.SeasonYear
 }

@@ -1,7 +1,7 @@
 package sentry
 
 import (
-	"errors"
+	"fmt"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/sirupsen/logrus"
@@ -39,7 +39,7 @@ func (h Hook) Fire(entry *logrus.Entry) error {
 	} else {
 		// Make a new error with the log message if there is no error provided
 		// because stacktraces are neat
-		exception = errors.New(entry.Message)
+		exception = fmt.Errorf(entry.Message)
 	}
 
 	tags, hasTags := entry.Data["tags"].(map[string]string)

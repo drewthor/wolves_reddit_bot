@@ -72,8 +72,14 @@ func (b startDateAscending) Swap(i, j int) {
 }
 
 func (b startDateAscending) Less(i, j int) bool {
-	firstTime := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[i].StartDateEastern)
-	secondTime := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[j].StartDateEastern)
+	firstTime, err := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[i].StartDateEastern)
+	if err != nil {
+		return false
+	}
+	secondTime, err := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[j].StartDateEastern)
+	if err != nil {
+		return false
+	}
 	return firstTime.Before(secondTime)
 }
 
@@ -122,6 +128,6 @@ func (s *GamesByStartDate) CurrentGameNumber(gameID string, stage seasonStage) (
 		break
 	}
 	// game not found
-	log.Println(fmt.Printf("failed to find current game number gameID: %s stage: %v ", gameID, stage))
+	log.Error(fmt.Printf("failed to find current game number from nba gameID: %s stage: %v ", gameID, stage))
 	return -1, false
 }

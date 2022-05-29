@@ -1,10 +1,7 @@
 package nba
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -99,73 +96,58 @@ type ScoreboardTeamLeaders struct {
 
 func GetTodaysScoreboard() (TodaysScoreboard, error) {
 	response, err := http.Get(todaysScoreboardURL)
-
 	if err != nil {
 		return TodaysScoreboard{}, err
 	}
+	defer response.Body.Close()
 
-	if response != nil {
-		defer response.Body.Close()
-	}
-
-	todaysScoreboard := TodaysScoreboard{}
-	err = json.NewDecoder(response.Body).Decode(&todaysScoreboard)
+	todaysScoreboard, err := unmarshalNBAHttpResponseToJSON[TodaysScoreboard](response.Body)
 	if err != nil {
-		b, _ := ioutil.ReadAll(response.Body)
-		log.WithError(err).Errorf("failed to decode todays scoreboard: %s", string(b))
-		return TodaysScoreboard{}, err
+		return TodaysScoreboard{}, fmt.Errorf("failed to decode todays scoreboard from nba %s %w", time.Now().UTC().Format(time.RFC3339), err)
 	}
 
 	return todaysScoreboard, nil
 }
 
-func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) GameScoreboard {
+func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) (GameScoreboard, error) {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + scoreboardAPIPath)
 	url := fmt.Sprintf(templateURI, todaysDate)
-	response, httpErr := http.Get(url)
-
-	defer func() {
-		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
-	}()
-
-	if httpErr != nil {
-		log.Fatal(httpErr)
+	response, err := http.Get(url)
+	if err != nil {
+		return GameScoreboard{}, fmt.Errorf("failed to get game scoreboard from nba for date %s and gameID %d from url %s %w", todaysDate, gameID, url, err)
 	}
+	defer response.Body.Close()
 
-	scoreboardResult := Scoreboard{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&scoreboardResult)
-	if decodeErr != nil {
-		log.Fatal(decodeErr)
+	scoreboardResult, err := unmarshalNBAHttpResponseToJSON[Scoreboard](response.Body)
+	if err != nil {
+		return GameScoreboard{}, fmt.Errorf("failed to get game scoreboard from nba for date %s and gameID %d from url %s %w", todaysDate, gameID, url, err)
 	}
 	for _, game := range scoreboardResult.Games {
 		if game.ID == gameID {
-			return game
+			return game, nil
 		}
 	}
-	log.Fatal("Game not found")
-	return GameScoreboard{}
+	return GameScoreboard{}, fmt.Errorf("could not find game with ID: %s on date: %s", gameID, todaysDate)
 }
 
-func GetGameScoreboards(gameDate string) Scoreboard {
-	gameScoreboardAPIPath := GetDailyAPIPaths().APIPaths.Scoreboard
+func GetGameScoreboards(gameDate string) (Scoreboard, error) {
+	dailyAPIPaths, err := GetDailyAPIPaths()
+	if err != nil {
+		return Scoreboard{}, err
+	}
+	gameScoreboardAPIPath := dailyAPIPaths.APIPaths.Scoreboard
 	templateURI := makeURIFormattable(nbaAPIBaseURI + gameScoreboardAPIPath)
 	url := fmt.Sprintf(templateURI, gameDate)
 	log.Println(url)
-	response, httpErr := http.Get(url)
-
-	defer func() {
-		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
-	}()
-
-	if httpErr != nil {
-		log.Fatal(httpErr)
+	response, err := http.Get(url)
+	if err != nil {
+		return Scoreboard{}, fmt.Errorf("failed to get scoreboard from nba from url %s %w", url, err)
 	}
-	scoreboardResult := Scoreboard{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&scoreboardResult)
-	if decodeErr != nil {
-		log.Fatal(decodeErr)
+	defer response.Body.Close()
+
+	scoreboardResult, err := unmarshalNBAHttpResponseToJSON[Scoreboard](response.Body)
+	if err != nil {
+		return Scoreboard{}, fmt.Errorf("failed to get scoreboard from nba from url %s %w", url, err)
 	}
-	return scoreboardResult
+	return scoreboardResult, nil
 }

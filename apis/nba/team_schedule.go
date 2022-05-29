@@ -1,14 +1,9 @@
 package nba
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 type TeamSchedule struct {
@@ -20,24 +15,15 @@ type TeamSchedule struct {
 func GetCurrentTeamSchedule(teamAPIPath, teamID string) (GamesByStartDate, error) {
 	templateURI := makeURIFormattable(nbaAPIBaseURI + teamAPIPath)
 	url := fmt.Sprintf(templateURI, teamID)
-	log.Println(url)
 	response, err := http.Get(url)
-
-	defer func() {
-		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
-	}()
-
 	if err != nil {
-		log.Error(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get current team schedule from nba for teamID %d from url %s %w", teamID, url, err)
 	}
+	defer response.Body.Close()
 
-	teamScheduleResult := TeamSchedule{}
-	err = json.NewDecoder(response.Body).Decode(&teamScheduleResult)
+	teamScheduleResult, err := unmarshalNBAHttpResponseToJSON[TeamSchedule](response.Body)
 	if err != nil {
-		log.Error(err)
-		return nil, err
+		return nil, fmt.Errorf("failed to get current team schedule from nba for teamID %d from url %s %w", teamID, url, err)
 	}
 	scheduledGameMap := map[string]Game{}
 	for _, scheduledGame := range teamScheduleResult.LeagueNode.Games {

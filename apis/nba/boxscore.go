@@ -3,7 +3,6 @@ package nba
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -56,7 +55,7 @@ type BoxscoreGameClockTenthSeconds struct {
 func (bgc *BoxscoreGameClockTenthSeconds) UnmarshalJSON(data []byte) error {
 	dataStr := string(data)
 	errorStr := fmt.Sprintf("could not unmarshal nba boxscore game clock: %s to json", dataStr)
-	unmarshalError := errors.New(errorStr)
+	unmarshalError := fmt.Errorf(errorStr)
 
 	err := json.Unmarshal(data, &bgc.boxscoreRawValue)
 	if err != nil {
@@ -112,7 +111,7 @@ type BoxscoreGameClockMinutes struct {
 func (bgc *BoxscoreGameClockMinutes) UnmarshalJSON(data []byte) error {
 	dataStr := string(data)
 	errorStr := fmt.Sprintf("could not unmarshal nba boxscore game clock: %s to json", dataStr)
-	unmarshalError := errors.New(errorStr)
+	unmarshalError := fmt.Errorf(errorStr)
 
 	err := json.Unmarshal(data, &bgc.boxscoreRawValue)
 	if err != nil {
@@ -394,7 +393,7 @@ func (b *BoxscoreOld) GameEnded() bool {
 	return false
 }
 
-func (b *BoxscoreOld) DurationUntilGameStarts() time.Duration {
+func (b *BoxscoreOld) DurationUntilGameStarts() (time.Duration, error) {
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
@@ -404,12 +403,15 @@ func (b *BoxscoreOld) DurationUntilGameStarts() time.Duration {
 	}
 	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
 
-	gameTime := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	gameTime, err := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	if err != nil {
+		return *new(time.Duration), err
+	}
 
-	return gameTime.Sub(currentTimeEastern)
+	return gameTime.Sub(currentTimeEastern), nil
 }
 
-func (b *BoxscoreOld) GameStarted() bool {
+func (b *BoxscoreOld) GameStarted() (bool, error) {
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
@@ -419,12 +421,15 @@ func (b *BoxscoreOld) GameStarted() bool {
 	}
 	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
 
-	gameTime := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	gameTime, err := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	if err != nil {
+		return false, err
+	}
 
 	if currentTimeEastern.After(gameTime) {
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
 func (b *BoxscoreOld) GetOpponent(team TriCode) TriCode {
@@ -639,7 +644,10 @@ func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDat
 	gameInfoTableString += fmt.Sprintf("|**Location**|%s, %s|\n", city, country)
 	gameInfoTableString += fmt.Sprintf("|**Attendance**|%s|\n", attendance)
 
-	gameTimeEastern := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
+	gameTimeEastern, err := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
+	if err != nil {
+		log.Fatal(err)
+	}
 	centralLocation, locationErr := time.LoadLocation("America/Chicago")
 	if locationErr != nil {
 		log.Fatal("Failed to load Minneapolis location")
@@ -1323,7 +1331,11 @@ func (b *Boxscore) Final() bool {
 
 // old boxscore exists for every game current and scheduled with a gameId
 func GetCurrentSeasonBoxscore(gameID, gameDate string) (BoxscoreOld, error) {
-	seasonStartYear := GetDailyAPIPaths().APISeasonInfoNode.SeasonYear
+	dailyAPIPaths, err := GetDailyAPIPaths()
+	if err != nil {
+		return BoxscoreOld{}, err
+	}
+	seasonStartYear := dailyAPIPaths.APISeasonInfoNode.SeasonYear
 	return GetOldBoxscore(gameID, gameDate, seasonStartYear)
 }
 
@@ -1371,13 +1383,13 @@ func GetOldBoxscore(gameID, gameDate string, seasonStartYear int) (BoxscoreOld, 
 		}
 
 		if response.StatusCode != 200 {
-			return BoxscoreOld{}, fmt.Errorf("could not get boxscore old for gameID: %s got status code: %d", gameID, response.StatusCode)
+			return BoxscoreOld{}, fmt.Errorf("could not get boxscore old from nba for gameID: %s url %s got status code: %d", gameID, url, response.StatusCode)
 		}
 
 		reqBody, err = ioutil.ReadAll(response.Body)
-		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscoreResult)
+		boxscoreResult, err = unmarshalNBAHttpResponseToJSON[BoxscoreOld](bytes.NewReader(reqBody))
 		if err != nil {
-			return BoxscoreOld{}, err
+			return BoxscoreOld{}, fmt.Errorf("failed to get boxscore old from nba for gameID: %s url %s %w", gameID, url, err)
 		}
 
 		n, err := file.Write(reqBody)
@@ -1438,13 +1450,13 @@ func GetBoxscoreDetailed(gameID string, seasonStartYear int) (Boxscore, error) {
 		}
 
 		if response.StatusCode != 200 {
-			return Boxscore{}, fmt.Errorf("could not get boxscore detailed for gameID: %s got status code: %d", gameID, response.StatusCode)
+			return Boxscore{}, fmt.Errorf("could not get boxscore detailed from nba for gameID: %s url %s got status code: %d", gameID, url, response.StatusCode)
 		}
 
 		reqBody, err = ioutil.ReadAll(response.Body)
-		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&boxscore)
+		boxscore, err = unmarshalNBAHttpResponseToJSON[Boxscore](bytes.NewReader(reqBody))
 		if err != nil {
-			return Boxscore{}, err
+			return Boxscore{}, fmt.Errorf("failed to get boxscore detailed from nba for gameID: %s url %s %w", gameID, url, err)
 		}
 
 		n, err := file.Write(reqBody)

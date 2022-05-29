@@ -16,14 +16,25 @@ func NewScheduler() *gocron.Scheduler {
 	s.TagsUnique()
 
 	s.Every(5).Minutes().Do(getTodaysGamesAndAddToJobs, s)
-	s.Every(12).Hours().Do(updateSeasonStartYear)
+	// 11am UTC or 3/4 am LA time
+	s.Every(1).Day().At("11:00").Do(updateSeasonStartYear)
 
 	return s
 }
 
 func updateSeasonStartYear() {
-	startYear := nba.GetDailyAPIPaths().APISeasonInfoNode.SeasonYear
-	nba.SetCurrentSeasonStartYear(startYear)
+	currentTime := time.Now()
+	nbaCurrentSeasonStartYear := currentTime.Year()
+	if currentTime.Month() < time.July {
+		nbaCurrentSeasonStartYear = currentTime.Year() - 1
+	}
+	dailyAPIPaths, err := nba.GetDailyAPIPaths()
+	if err == nil {
+		nbaCurrentSeasonStartYear = dailyAPIPaths.APISeasonInfoNode.SeasonYear
+	} else {
+		log.WithError(err).Error("could not get daily API to set current NBA season start year; falling back to calendar year")
+	}
+	nba.SetCurrentSeasonStartYear(nbaCurrentSeasonStartYear)
 }
 
 func getTodaysGamesAndAddToJobs(s *gocron.Scheduler) {

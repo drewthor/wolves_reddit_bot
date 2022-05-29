@@ -49,7 +49,7 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 
 	games, err := h.GameService.Get(gameDate)
 	if err != nil {
-		log.Error(err)
+		log.WithError(err).Errorf("failed to get games for date: %s", gameDate)
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
