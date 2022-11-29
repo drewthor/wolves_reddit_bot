@@ -7,7 +7,7 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/util"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler interface {
@@ -38,7 +38,7 @@ func (h *handler) Routes() chi.Router {
 }
 
 func (h *handler) List(w http.ResponseWriter, r *http.Request) {
-	teams, err := h.TeamService.GetAll()
+	teams, err := h.TeamService.ListPlayers(r.Context())
 
 	if err != nil {
 		log.Error(err)
@@ -52,7 +52,7 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
 	teamID := chi.URLParam(r, "teamID")
 
-	team, err := h.TeamService.Get(teamID)
+	team, err := h.TeamService.Get(r.Context(), teamID)
 
 	if err != nil {
 		log.Error(err)
@@ -70,7 +70,7 @@ func (h *handler) UpdateTeams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	teams, err := h.TeamService.UpdateTeams(seasonStartYear)
+	teams, err := h.TeamService.UpdateTeams(r.Context(), seasonStartYear)
 
 	if err != nil {
 		log.Error(err)

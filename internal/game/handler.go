@@ -8,7 +8,7 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/util"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler interface {
@@ -35,6 +35,7 @@ func (h *handler) Routes() chi.Router {
 	})
 
 	r.Post("/update", h.UpdateGames)
+	r.Post("/updateGame", h.UpdateGame)
 
 	return r
 }
@@ -47,7 +48,7 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	games, err := h.GameService.Get(gameDate)
+	games, err := h.GameService.List(r.Context(), gameDate)
 	if err != nil {
 		log.WithError(err).Errorf("failed to get games for date: %s", gameDate)
 		util.WriteJSON(http.StatusInternalServerError, err, w)
@@ -64,9 +65,40 @@ func (h *handler) UpdateGames(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	games, err := h.GameService.UpdateGames(seasonStartYear)
+	games, err := h.GameService.UpdateSeasonGames(r.Context(), seasonStartYear)
 	if err != nil {
 		log.WithError(err).Errorf("could not update games for season-start-year: %d", seasonStartYear)
+		util.WriteJSON(http.StatusInternalServerError, err, w)
+		return
+	}
+
+	util.WriteJSON(http.StatusOK, games, w)
+}
+
+func (h *handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
+	gameID := r.URL.Query().Get("game-id")
+	gameDate := r.URL.Query().Get("game-date")
+	seasonStartYearStr := r.URL.Query().Get("season-start-year")
+
+	if gameID == "" {
+		util.WriteJSON(http.StatusBadRequest, "invalid required game-id", w)
+		return
+	}
+
+	if gameDate == "" {
+		util.WriteJSON(http.StatusBadRequest, "invalid required game-date", w)
+		return
+	}
+
+	seasonStartYear, err := strconv.Atoi(seasonStartYearStr)
+	if err != nil {
+		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
+		return
+	}
+
+	games, err := h.GameService.UpdateGame(r.Context(), gameID, gameDate, seasonStartYear)
+	if err != nil {
+		log.WithError(err).Errorf("could not update game")
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

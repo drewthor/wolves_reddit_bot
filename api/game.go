@@ -1,6 +1,8 @@
 package api
 
-import "time"
+import (
+	"time"
+)
 
 type Game struct {
 	ID                  string     `json:"id"`

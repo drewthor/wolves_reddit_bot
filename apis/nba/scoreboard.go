@@ -1,11 +1,13 @@
 package nba
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
 )
 
 const todaysScoreboardURL = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
@@ -19,8 +21,8 @@ type GameScoreboard struct {
 	GameDuration GameDuration     `json:"gameDuration"`
 	ID           string           `json:"gameId"`
 	Period       Period           `json:"period"`
-	StartTimeUTC string           `json:"startTimeUTC"`
-	EndTimeUTC   string           `json:"endTimeUTC,omitempty"`
+	StartTimeUTC time.Time        `json:"startTimeUTC"`
+	EndTimeUTC   time.Time        `json:"endTimeUTC,omitempty"`
 	HomeTeamInfo TeamBoxscoreInfo `json:"hTeam"`
 	AwayTeamInfo TeamBoxscoreInfo `json:"vTeam"`
 }
@@ -43,20 +45,20 @@ type ScoreboardDetailed struct {
 	LeagueID   string `json:"leagueId"`   // ex. 00 for NBA
 	LeagueName string `json:"leagueName"` // ex. National Basketball Association
 	Games      []struct {
-		GameID            string                        `json:"gameId"`         // ex. 20211108
-		GameCode          string                        `json:"gameCode"`       // ex. 20211108/NYKPHI
-		GameStatus        int                           `json:"gameStatus"`     // ex. 1
-		GameStatusText    string                        `json:"gameStatusText"` // ex. 7:00 pm ET
-		Period            int                           `json:"period"`
-		GameClock         BoxscoreGameClockTenthSeconds `json:"gameClock"`
-		GameTimeUTC       time.Time                     `json:"gameTimeUTC"`
-		GameTimeET        time.Time                     `json:"gameTimeET"`
-		RegulationPeriods int                           `json:"regulationPeriods"`
-		IfNecessary       bool                          `json:"ifNecessary"`
-		SeriesGameNumber  string                        `json:"seriesGameNumber"`
-		SeriesText        string                        `json:"seriesText"`
-		HomeTeam          TeamScoreboard                `json:"homeTeam"`
-		AwayTeam          TeamScoreboard                `json:"awayTeam"`
+		GameID            string         `json:"gameId"`         // ex. 20211108
+		GameCode          string         `json:"gameCode"`       // ex. 20211108/NYKPHI
+		GameStatus        int            `json:"gameStatus"`     // ex. 1
+		GameStatusText    string         `json:"gameStatusText"` // ex. 7:00 pm ET
+		Period            int            `json:"period"`
+		GameClock         duration       `json:"gameClock"`
+		GameTimeUTC       time.Time      `json:"gameTimeUTC"`
+		GameTimeET        time.Time      `json:"gameTimeET"`
+		RegulationPeriods int            `json:"regulationPeriods"`
+		IfNecessary       bool           `json:"ifNecessary"`
+		SeriesGameNumber  string         `json:"seriesGameNumber"`
+		SeriesText        string         `json:"seriesText"`
+		HomeTeam          TeamScoreboard `json:"homeTeam"`
+		AwayTeam          TeamScoreboard `json:"awayTeam"`
 	} `json:"games"`
 	GameLeaders struct {
 		HomeTeamLeaders ScoreboardTeamLeaders `json:"homeLeaders"`
@@ -94,16 +96,15 @@ type ScoreboardTeamLeaders struct {
 	Assists      int     `json:"assists"`
 }
 
-func GetTodaysScoreboard() (TodaysScoreboard, error) {
-	response, err := http.Get(todaysScoreboardURL)
+func GetTodaysScoreboard(ctx context.Context, r2Client cloudflare.Client, bucket string) (TodaysScoreboard, error) {
+	t := time.Now().UTC().Round(time.Hour).Format(time.RFC3339)
+	filePath := os.Getenv("STORAGE_PATH") + fmt.Sprintf("/scoreboard/%s", t)
+
+	objectKey := fmt.Sprintf("scoreboard/%s_cdn", t)
+
+	todaysScoreboard, err := fetchObjectAndSaveToFile[TodaysScoreboard](ctx, r2Client, todaysScoreboardURL, filePath, bucket, objectKey)
 	if err != nil {
 		return TodaysScoreboard{}, err
-	}
-	defer response.Body.Close()
-
-	todaysScoreboard, err := unmarshalNBAHttpResponseToJSON[TodaysScoreboard](response.Body)
-	if err != nil {
-		return TodaysScoreboard{}, fmt.Errorf("failed to decode todays scoreboard from nba %s %w", time.Now().UTC().Format(time.RFC3339), err)
 	}
 
 	return todaysScoreboard, nil
@@ -130,7 +131,7 @@ func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) (Gam
 	return GameScoreboard{}, fmt.Errorf("could not find game with ID: %s on date: %s", gameID, todaysDate)
 }
 
-func GetGameScoreboards(gameDate string) (Scoreboard, error) {
+func GetGameScoreboards(ctx context.Context, r2Client cloudflare.Client, bucket string, gameDate string) (Scoreboard, error) {
 	dailyAPIPaths, err := GetDailyAPIPaths()
 	if err != nil {
 		return Scoreboard{}, err
@@ -138,16 +139,16 @@ func GetGameScoreboards(gameDate string) (Scoreboard, error) {
 	gameScoreboardAPIPath := dailyAPIPaths.APIPaths.Scoreboard
 	templateURI := makeURIFormattable(nbaAPIBaseURI + gameScoreboardAPIPath)
 	url := fmt.Sprintf(templateURI, gameDate)
-	log.Println(url)
-	response, err := http.Get(url)
-	if err != nil {
-		return Scoreboard{}, fmt.Errorf("failed to get scoreboard from nba from url %s %w", url, err)
-	}
-	defer response.Body.Close()
 
-	scoreboardResult, err := unmarshalNBAHttpResponseToJSON[Scoreboard](response.Body)
+	t := time.Now().UTC().Round(time.Hour).Format(time.RFC3339)
+	filePath := os.Getenv("STORAGE_PATH") + fmt.Sprintf("/scoreboardold/%s", t)
+
+	objectKey := fmt.Sprintf("scoreboard/%s_data", t)
+
+	gameScoreboards, err := fetchObjectAndSaveToFile[Scoreboard](ctx, r2Client, url, filePath, bucket, objectKey)
 	if err != nil {
-		return Scoreboard{}, fmt.Errorf("failed to get scoreboard from nba from url %s %w", url, err)
+		return Scoreboard{}, err
 	}
-	return scoreboardResult, nil
+
+	return gameScoreboards, nil
 }

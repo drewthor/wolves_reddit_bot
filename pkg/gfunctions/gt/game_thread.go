@@ -1,9 +1,12 @@
 package gt
 
 import (
+	"context"
 	"sync"
 	"time"
 
+	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/drewthor/wolves_reddit_bot/util"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -50,7 +53,7 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 
 	if gameToday {
 		log.Println("game today")
-		boxscore, err := nba.GetCurrentSeasonBoxscore(todaysGame.GameID, currentDateWestern)
+		boxscore, err := nba.GetCurrentSeasonBoxscore(context.Background(), cloudflare.Client{}, util.NBAR2Bucket, todaysGame.GameID, currentDateWestern)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -1,6 +1,7 @@
 package team_season
 
 import (
+	"context"
 	"strings"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
@@ -8,7 +9,7 @@ import (
 )
 
 type Service interface {
-	UpdateTeamSeasons(teamIDs map[string]nba.Team, seasonStartYear int) ([]api.TeamSeason, error)
+	UpdateTeamSeasons(ctx context.Context, teamIDs map[string]nba.Team, seasonStartYear int) ([]api.TeamSeason, error)
 }
 
 func NewService(teamSeasonStore Store) Service {
@@ -19,7 +20,7 @@ type service struct {
 	TeamSeasonStore Store
 }
 
-func (s *service) UpdateTeamSeasons(teamIDs map[string]nba.Team, seasonStartYear int) ([]api.TeamSeason, error) {
+func (s *service) UpdateTeamSeasons(ctx context.Context, teamIDs map[string]nba.Team, seasonStartYear int) ([]api.TeamSeason, error) {
 	teamSeasonUpdates := []TeamSeasonUpdate{}
 	for teamID, nbaTeam := range teamIDs {
 		league := "nba"
@@ -36,7 +37,7 @@ func (s *service) UpdateTeamSeasons(teamIDs map[string]nba.Team, seasonStartYear
 		})
 	}
 
-	updatedTeamSeasons, err := s.TeamSeasonStore.UpdateTeamSeasons(teamSeasonUpdates)
+	updatedTeamSeasons, err := s.TeamSeasonStore.UpdateTeamSeasons(ctx, teamSeasonUpdates)
 	if err != nil {
 		return nil, err
 	}

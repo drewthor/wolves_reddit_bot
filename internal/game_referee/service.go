@@ -1,7 +1,9 @@
 package game_referee
 
+import "context"
+
 type Service interface {
-	UpdateGameReferees(gameRefereeUpdates []GameRefereeUpdate) error
+	UpdateGameReferees(ctx context.Context, gameRefereeUpdates []GameRefereeUpdate) error
 }
 
 func NewService(gameRefereeStore Store) Service {
@@ -12,7 +14,7 @@ type service struct {
 	GameRefereeStore Store
 }
 
-func (s *service) UpdateGameReferees(gameRefereeUpdates []GameRefereeUpdate) error {
-	_, err := s.GameRefereeStore.UpdateGameReferees(gameRefereeUpdates)
+func (s *service) UpdateGameReferees(ctx context.Context, gameRefereeUpdates []GameRefereeUpdate) error {
+	_, err := s.GameRefereeStore.UpdateGameReferees(ctx, gameRefereeUpdates)
 	return err
 }

@@ -21,6 +21,6 @@ type Player struct {
 	NBADebutYear    *int       `json:"nba_debut_year"`
 	NBAPlayerID     int        `json:"nba_player_id"`
 	Country         *string    `json:"country"`
-	TimeCreated     time.Time  `json:"time_created"`
-	TimeModified    *time.Time `json:"time_modified"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       *time.Time `json:"updated_at"`
 }

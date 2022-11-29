@@ -1,9 +1,12 @@
 package pgt
 
 import (
+	"context"
 	"sync"
 	"time"
 
+	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/drewthor/wolves_reddit_bot/util"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -51,7 +54,7 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		boxscore, err := nba.GetCurrentSeasonBoxscore(todaysGame.GameID, currentDateWestern)
+		boxscore, err := nba.GetCurrentSeasonBoxscore(context.Background(), cloudflare.Client{}, util.NBAR2Bucket, todaysGame.GameID, currentDateWestern)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -65,12 +68,8 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 				boxscore.UpdateTeamsRegularSeasonRecords(currentGameNumber)
 				boxscore.UpdateTeamsPlayoffsSeriesRecords()
 			}
-			if todaysGameScoreboard.EndTimeUTC != "" {
-				gameEndTimeUTC, err := time.Parse(nba.UTCFormat, todaysGameScoreboard.EndTimeUTC)
-				if err != nil {
-					log.Fatal(err)
-				}
-				log.Println(gameEndTimeUTC)
+			if !todaysGameScoreboard.EndTimeUTC.IsZero() {
+				log.Println(todaysGameScoreboard.EndTimeUTC)
 			}
 			datastore := new(gcloud.Datastore)
 			gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)

@@ -1,19 +1,21 @@
 package player
 
 import (
+	"context"
 	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 )
 
 type Service interface {
-	Get(playerID string) (api.Player, error)
-	GetAll() ([]api.Player, error)
-	UpdatePlayers(seasonStartYear int) ([]api.Player, error)
+	Get(ctx context.Context, playerID string) (api.Player, error)
+	ListPlayers(ctx context.Context) ([]api.Player, error)
+	UpdatePlayers(ctx context.Context, seasonStartYear int) ([]api.Player, error)
 }
 
 func NewService(playerStore Store) Service {
@@ -24,28 +26,31 @@ type service struct {
 	PlayerStore Store
 }
 
-func (s *service) Get(playerID string) (api.Player, error) {
-	player, err := s.PlayerStore.Get(playerID)
+func (s *service) Get(ctx context.Context, playerID string) (api.Player, error) {
+	player, err := s.PlayerStore.GetPlayerWithID(ctx, playerID)
 	if err != nil {
 		return player, err
 	}
 	return player, nil
 }
 
-func (s *service) GetAll() ([]api.Player, error) {
-	players, err := s.PlayerStore.GetAll()
+func (s *service) ListPlayers(ctx context.Context) ([]api.Player, error) {
+	ctx, span := otel.Tracer("service").Start(ctx, "player.service.ListPlayers")
+	defer span.End()
+
+	players, err := s.PlayerStore.ListPlayers(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return players, nil
 }
 
-func (s *service) UpdatePlayers(seasonStartYear int) ([]api.Player, error) {
+func (s *service) UpdatePlayers(ctx context.Context, seasonStartYear int) ([]api.Player, error) {
 	players, err := s.getSeasonPlayers(seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
-	updatedPlayers, err := s.PlayerStore.UpdatePlayers(players)
+	updatedPlayers, err := s.PlayerStore.UpdatePlayers(ctx, players)
 	if err != nil {
 		return nil, err
 	}

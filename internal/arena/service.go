@@ -1,11 +1,13 @@
 package arena
 
 import (
+	"context"
+
 	"github.com/drewthor/wolves_reddit_bot/api"
 )
 
 type Service interface {
-	UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error)
+	UpdateArenas(ctx context.Context, arenas []ArenaUpdate) ([]api.Arena, error)
 }
 
 func NewService(arenaStore Store) Service {
@@ -16,6 +18,6 @@ type service struct {
 	ArenaStore Store
 }
 
-func (s *service) UpdateArenas(arenas []ArenaUpdate) ([]api.Arena, error) {
-	return s.ArenaStore.UpdateArenas(arenas)
+func (s *service) UpdateArenas(ctx context.Context, arenas []ArenaUpdate) ([]api.Arena, error) {
+	return s.ArenaStore.UpdateArenas(ctx, arenas)
 }

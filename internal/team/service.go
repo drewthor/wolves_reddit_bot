@@ -1,6 +1,7 @@
 package team
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
@@ -9,9 +10,9 @@ import (
 )
 
 type Service interface {
-	Get(teamID string) (api.Team, error)
-	GetAll() ([]api.Team, error)
-	UpdateTeams(seasonStartYear int) ([]api.Team, error)
+	Get(ctx context.Context, teamID string) (api.Team, error)
+	ListPlayers(ctx context.Context) ([]api.Team, error)
+	UpdateTeams(ctx context.Context, seasonStartYear int) ([]api.Team, error)
 }
 
 func NewService(teamStore Store, teamSeasonService team_season.Service) Service {
@@ -26,8 +27,8 @@ type service struct {
 	TeamSeasonService team_season.Service
 }
 
-func (s *service) Get(teamID string) (api.Team, error) {
-	team, err := s.TeamStore.Get(teamID)
+func (s *service) Get(ctx context.Context, teamID string) (api.Team, error) {
+	team, err := s.TeamStore.GetTeamWithID(ctx, teamID)
 	if err != nil {
 		return api.Team{}, err
 	}
@@ -35,8 +36,8 @@ func (s *service) Get(teamID string) (api.Team, error) {
 	return team, err
 }
 
-func (s *service) GetAll() ([]api.Team, error) {
-	teams, err := s.TeamStore.GetAll()
+func (s *service) ListPlayers(ctx context.Context) ([]api.Team, error) {
+	teams, err := s.TeamStore.ListTeams(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +45,7 @@ func (s *service) GetAll() ([]api.Team, error) {
 	return teams, err
 }
 
-func (s *service) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
+func (s *service) UpdateTeams(ctx context.Context, seasonStartYear int) ([]api.Team, error) {
 	nbaTeams, err := nba.GetTeamsForSeason(seasonStartYear)
 	if err != nil {
 		return nil, err
@@ -74,7 +75,7 @@ func (s *service) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 
 	teamIDNBATeamMappings := map[string]nba.Team{}
 
-	updatedTeams, err := s.TeamStore.UpdateTeams(teamUpdates)
+	updatedTeams, err := s.TeamStore.UpdateTeams(ctx, teamUpdates)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +84,7 @@ func (s *service) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 		teamIDNBATeamMappings[updatedTeam.ID] = nbaTeamIDTeamMappings[updatedTeam.NBATeamID]
 	}
 
-	_, err = s.TeamSeasonService.UpdateTeamSeasons(teamIDNBATeamMappings, seasonStartYear)
+	_, err = s.TeamSeasonService.UpdateTeamSeasons(ctx, teamIDNBATeamMappings, seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +93,8 @@ func (s *service) UpdateTeams(seasonStartYear int) ([]api.Team, error) {
 }
 
 // get a mapping from nba team id -> db team id
-func (s *service) NBATeamIDMappings() (map[string]string, error) {
-	nbaTeamIDMappings, err := s.TeamStore.NBATeamIDMappings()
+func (s *service) NBATeamIDMappings(ctx context.Context) (map[string]string, error) {
+	nbaTeamIDMappings, err := s.TeamStore.NBATeamIDMappings(ctx)
 	if err != nil {
 		return nil, err
 	}

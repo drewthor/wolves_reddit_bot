@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,7 +22,7 @@ const authTokenURI = "https://www.reddit.com/api/v1/access_token"
 const redirectURI = "https://www.reddit.com/r/timberwolves"
 const userAgent = "Wolves Reddit Bot v0.1 by /u/SilverPenguino"
 
-const configFile = "reddit_config.json"
+const configFilename = "reddit_config.json"
 
 type userConfig struct {
 	Username     string `json:"username"`
@@ -90,7 +89,7 @@ func (c *Client) loadConfiguration(file string) {
 
 func (c *Client) Authorize() {
 	c.initHTTPClient()
-	c.loadConfiguration(configFile)
+	c.loadConfiguration(configFilename)
 	form := url.Values{
 		"grant_type": {"password"},
 		"username":   {c.userConfig.Username},
@@ -107,7 +106,7 @@ func (c *Client) Authorize() {
 
 	defer func() {
 		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
+		io.Copy(io.Discard, response.Body)
 	}()
 
 	if err != nil {
@@ -124,7 +123,7 @@ func (c *Client) Authorize() {
 		// to the oauth2 context. https://github.com/golang/oauth2/issues/179
 		client := &http.Client{
 			Transport: &oauth2.Transport{
-				Source: c.config.TokenSource(oauth2.NoContext, &oauth2.Token{
+				Source: c.config.TokenSource(context.Background(), &oauth2.Token{
 					AccessToken: rToken.Token,
 				}),
 				Base: &redditTransport{
@@ -184,7 +183,7 @@ func (c *Client) SubmitNewPost(subreddit, title, content string) SubmitResponse 
 
 	defer func() {
 		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
+		io.Copy(io.Discard, response.Body)
 	}()
 
 	if err != nil {
@@ -230,7 +229,7 @@ func (c *Client) UpdateUserText(thingFullname, content string) {
 
 	defer func() {
 		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
+		io.Copy(io.Discard, response.Body)
 	}()
 
 	if err != nil {
@@ -258,7 +257,7 @@ func (c *Client) GetThingURLs(thingFullnames []string, subreddit string) map[str
 
 	defer func() {
 		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
+		io.Copy(io.Discard, response.Body)
 	}()
 
 	if err != nil {

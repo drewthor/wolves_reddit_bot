@@ -1,12 +1,20 @@
 package nba
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
+	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/drewthor/wolves_reddit_bot/util"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,6 +34,10 @@ func makeURIFormattable(uri string) string {
 	format := "%s"
 	formattedString := regex.ReplaceAllString(uri, format)
 	return formattedString
+}
+
+func NormalizeGameDate(gameDate string) string {
+	return strings.ReplaceAll(gameDate, "-", "")
 }
 
 func makeGoTimeFromAPIData(startTimeEastern, startDateEastern string) (time.Time, error) {
@@ -128,14 +140,137 @@ func unmarshalNBAHttpResponseToJSON[T any](reader io.Reader) (T, error) {
 	if err != nil {
 		errorMessage := "could not decode json body to raw json"
 		log.WithError(err).Error(errorMessage)
-		return t, fmt.Errorf(errorMessage + " %w")
+		return t, fmt.Errorf(errorMessage+": %w", err)
 	}
 	err = json.Unmarshal(raw, &t)
 	if err != nil {
 		errorMessage := fmt.Sprintf("could not decode json to type %T raw: %s", t, raw)
 		log.WithError(err).Error(errorMessage)
-		return t, fmt.Errorf(errorMessage+" %w", err)
+		return t, fmt.Errorf(errorMessage+": %w", err)
 	}
 
 	return t, nil
+}
+
+func fetchObjectAndSaveToFile[T any](ctx context.Context, r2Client cloudflare.Client, url string, filePath string, bucket string, objectKey string) (T, error) {
+	dir := filepath.Dir(filePath)
+
+	if err := os.MkdirAll(dir, 0770); err != nil {
+		return *new(T), err
+	}
+
+	file, err := os.Create(filePath)
+	if err != nil {
+		return *new(T), err
+	}
+
+	defer file.Close()
+
+	obj := *new(T)
+
+	response, err := http.Get(url)
+
+	if response != nil {
+		defer response.Body.Close()
+	}
+
+	if err != nil {
+		return *new(T), err
+	}
+
+	if response.StatusCode != 200 {
+		return *new(T), fmt.Errorf("failed to get object of type %T from url %s with status code %d", *new(T), url, response.StatusCode)
+	}
+
+	var respBody []byte
+	respBody, err = io.ReadAll(response.Body)
+	obj, err = unmarshalNBAHttpResponseToJSON[T](bytes.NewReader(respBody))
+	if err != nil {
+		return *new(T), fmt.Errorf("failed to get object of type %T from url %s with status code %d", *new(T), url, response.StatusCode)
+	}
+
+	if err := r2Client.CreateObject(ctx, bucket, objectKey, util.ContentTypeJSON, bytes.NewReader(respBody)); err != nil {
+		log.WithError(err).WithFields(log.Fields{"bucket": bucket, "object_key": objectKey}).Error("failed to write object to r2 bucket")
+	}
+
+	n, err := file.Write(respBody)
+	if err != nil {
+		return *new(T), err
+	}
+	if n == 0 {
+		return *new(T), fmt.Errorf("wrote nothing to file %s", filePath)
+	}
+
+	return obj, nil
+}
+
+func fetchObjectFromFileOrURL[T any](ctx context.Context, r2Client cloudflare.Client, url string, filePath string, bucket string, objectKey string, loadFromFileFunc func(T) bool) (T, error) {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0770); err != nil {
+		return *new(T), err
+	}
+
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		return *new(T), err
+	}
+
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return *new(T), err
+	}
+
+	reqBody := []byte{}
+	obj := *new(T)
+
+	loadFromFile := false
+	if stat.Size() > 0 {
+		reqBody, err = io.ReadAll(file)
+
+		err = json.NewDecoder(bytes.NewReader(reqBody)).Decode(&obj)
+		if err == nil {
+			loadFromFile = loadFromFileFunc(obj)
+		}
+
+		if err := r2Client.CreateObject(ctx, bucket, objectKey, util.ContentTypeJSON, bytes.NewReader(reqBody)); err != nil {
+			log.WithError(err).WithFields(log.Fields{"bucket": bucket, "object_key": objectKey}).Error("failed to write object to r2 bucket")
+		}
+	}
+
+	if stat.Size() <= 0 || loadFromFile {
+		response, err := http.Get(url)
+
+		if response != nil {
+			defer response.Body.Close()
+		}
+
+		if err != nil {
+			return *new(T), err
+		}
+
+		if response.StatusCode != 200 {
+			return *new(T), fmt.Errorf("failed to get object of type %T from url %s with status code %d", *new(T), url, response.StatusCode)
+		}
+
+		reqBody, err = io.ReadAll(response.Body)
+		obj, err = unmarshalNBAHttpResponseToJSON[T](bytes.NewReader(reqBody))
+		if err != nil {
+			return *new(T), fmt.Errorf("failed to get object of type %T from url %s with status code %d", *new(T), url, response.StatusCode)
+		}
+
+		n, err := file.Write(reqBody)
+		if err != nil {
+			return *new(T), err
+		}
+		if n == 0 {
+			return *new(T), fmt.Errorf("wrote nothing to file %s", filePath)
+		}
+
+		if err := r2Client.CreateObject(ctx, bucket, objectKey, util.ContentTypeJSON, bytes.NewReader(reqBody)); err != nil {
+			log.WithError(err).WithFields(log.Fields{"bucket": bucket, "object_key": objectKey}).Error("failed to write object to r2 bucket")
+		}
+	}
+
+	return obj, nil
 }

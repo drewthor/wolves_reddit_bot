@@ -1,7 +1,9 @@
 package team_game_stats
 
+import "context"
+
 type Service interface {
-	UpdateTeamGameStatsTotals(teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdate) ([]TeamGameStatsTotal, error)
+	UpdateTeamGameStatsTotals(ctx context.Context, teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdate) ([]TeamGameStatsTotal, error)
 }
 
 func NewService(teamGameStatsStore Store) Service {
@@ -12,6 +14,10 @@ type service struct {
 	TeamGameStatsStore Store
 }
 
-func (s service) UpdateTeamGameStatsTotals(teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdate) ([]TeamGameStatsTotal, error) {
-	return s.TeamGameStatsStore.UpdateTeamGameStatsTotals(teamGameStatsTotalsUpdates)
+func (s service) UpdateTeamGameStatsTotals(ctx context.Context, teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdate) ([]TeamGameStatsTotal, error) {
+	return s.TeamGameStatsStore.UpdateTeamGameStatsTotals(ctx, teamGameStatsTotalsUpdates)
+}
+
+func (s service) UpdateTeamGameStatsTotalsOld(ctx context.Context, teamGameStatsTotalsUpdates []TeamGameStatsTotalUpdateOld) ([]TeamGameStatsTotal, error) {
+	return s.TeamGameStatsStore.UpdateTeamGameStatsTotalsOld(ctx, teamGameStatsTotalsUpdates)
 }

@@ -6,8 +6,9 @@ import (
 
 	"github.com/drewthor/wolves_reddit_bot/util"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler interface {
@@ -38,7 +39,10 @@ func (h handler) Routes() chi.Router {
 }
 
 func (h *handler) List(w http.ResponseWriter, r *http.Request) {
-	players, err := h.PlayerService.GetAll()
+	ctx, span := otel.Tracer("player").Start(r.Context(), "player.handler.List")
+	defer span.End()
+
+	players, err := h.PlayerService.ListPlayers(ctx)
 
 	if err != nil {
 		log.Error(err)
@@ -52,7 +56,7 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
 	playerID := chi.URLParam(r, "id")
 
-	player, err := h.PlayerService.Get(playerID)
+	player, err := h.PlayerService.Get(r.Context(), playerID)
 
 	if err != nil {
 		log.Error(err)
@@ -70,7 +74,7 @@ func (h *handler) UpdatePlayers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	players, err := h.PlayerService.UpdatePlayers(seasonStartYear)
+	players, err := h.PlayerService.UpdatePlayers(r.Context(), seasonStartYear)
 
 	if err != nil {
 		log.Error(err)

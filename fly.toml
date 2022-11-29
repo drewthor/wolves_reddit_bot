@@ -9,6 +9,9 @@ kill_timeout = 5
   builder = "paketobuildpacks/builder:base"
   buildpacks = ["gcr.io/paketo-buildpacks/go"]
 
+#[deploy]
+#  release_command = ""
+
 [env]
   PORT = "8080"
   STORAGE_PATH = "/data"
