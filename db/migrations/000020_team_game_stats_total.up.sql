@@ -1,0 +1,75 @@
+begin;
+
+create table team_game_stats_total
+(
+    id                               uuid                     default gen_random_uuid() not null primary key,
+    created_at                       timestamp with time zone default now()             not null,
+    updated_at                       timestamp with time zone,
+    game_id                          uuid not null references game (id),
+    team_id                          uuid not null references team (id),
+    game_time_played_seconds         integer,
+    total_player_time_played_seconds integer,
+    points                           integer,
+    points_against                   integer,
+    assists                          integer,
+    personal_turnovers               integer,
+    team_turnovers                   integer,
+    total_turnovers                  integer,
+    steals                           integer,
+    three_pointers_attempted         integer,
+    three_pointers_made              integer,
+    field_goals_attempted            integer,
+    field_goals_made                 integer,
+    effective_adjusted_field_goals   numeric(5, 4),
+    free_throws_attempted            integer,
+    free_throws_made                 integer,
+    blocks                           integer,
+    times_blocked                    integer,
+    personal_offensive_rebounds      integer,
+    personal_defensive_rebounds      integer,
+    total_personal_rebounds          integer,
+    team_rebounds                    integer,
+    team_offensive_rebounds          integer,
+    team_defensive_rebounds          integer,
+    total_offensive_rebounds         integer,
+    total_defensive_rebounds         integer,
+    total_rebounds                   integer,
+    personal_fouls                   integer,
+    offensive_fouls                  integer,
+    fouls_drawn                      integer,
+    team_fouls                       integer,
+    personal_technical_fouls         integer,
+    team_technical_fouls             integer,
+    full_timeouts_remaining          integer,
+    short_timeouts_remaining         integer,
+    total_timeouts_remaining         integer,
+    fast_break_points                integer,
+    fast_break_points_attempted      integer,
+    fast_break_points_made           integer,
+    points_in_paint                  integer,
+    points_in_paint_attempted        integer,
+    points_in_paint_made             integer,
+    second_chance_points             integer,
+    second_chance_points_attempted   integer,
+    second_chance_points_made        integer,
+    points_off_turnovers             integer,
+    biggest_lead                     integer,
+    biggest_lead_score               text,
+    biggest_scoring_run              integer,
+    biggest_scoring_run_score        text,
+    time_leading_tenth_seconds       integer,
+    lead_changes                     integer,
+    times_tied                       integer,
+    true_shooting_attempts           numeric(6, 3),
+    true_shooting_percentage         numeric(5, 4),
+    bench_points                     integer,
+    unique (game_id, team_id)
+);
+
+create trigger set_timestamp
+    before update
+    on team_game_stats_total
+    for each row
+execute procedure trigger_set_timestamp();
+
+commit;

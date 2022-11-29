@@ -1,0 +1,1 @@
+drop table "nba"."team_game_stats_period";

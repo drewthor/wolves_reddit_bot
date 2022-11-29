@@ -1,0 +1,1 @@
+drop table player_team_game_stats_total;
