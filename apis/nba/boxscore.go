@@ -1,44 +1,275 @@
 package nba
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
 	"math"
-	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	log "github.com/sirupsen/logrus"
 )
 
+// play by play https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_0022000180.json
+
+const BoxscoreURL = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_%s.json"
+const OldBoxscoreURL = "https://data.nba.net/prod/v1/%s/%s_boxscore.json"
+
 type Boxscore struct {
+	GameNode struct {
+		GameID               string             `json:"gameId"`
+		GameTimeLocal        string             `json:"gameTimeLocal"` // ex. 2021-07-14T20:00:00-05:00
+		GameTimeUTC          datetime           `json:"gameTimeUTC"`
+		GameTimeHome         string             `json:"gameTimeHome"`      // ex. 2021-07-14T20:00:00-05:00
+		GameTimeAway         string             `json:"gameTimeAway"`      // ex. 2021-07-14T20:00:00-07:00
+		GameET               string             `json:"gameEt"`            // ex. 2021-07-14T20:00:00-04:00
+		TotalDurationMinutes int                `json:"duration"`          // duration in minutes (real world time) from tipoff to final buzzer
+		GameCode             string             `json:"gameCode"`          // ex. 20210714/PHXMIL
+		GameStatusText       string             `json:"gameStatusText"`    // ex. [Q3 03:03, Final]
+		GameStatus           int                `json:"gameStatus"`        // ex. [1 - scheduled, 2 - in progress, 3 - final]
+		RegulationPeriods    int                `json:"regulationPeriods"` // not sure why this would be anything but 4?
+		Period               int                `json:"period"`
+		GameClock            duration           `json:"gameClock"` // ex. PT11M34.00S
+		Attendance           int                `json:"attendance"`
+		Sellout              string             `json:"sellout"` // ex. [0,1]
+		Arena                BoxscoreArena      `json:"arena"`
+		Officials            []BoxscoreOfficial `json:"officials"`
+		HomeTeam             BoxscoreTeam       `json:"homeTeam"`
+		AwayTeam             BoxscoreTeam       `json:"awayTeam"`
+	} `json:"game"`
+}
+
+type BoxscoreGameClockMinutes struct {
+	Duration         int
+	boxscoreRawValue string
+}
+
+func (bgc *BoxscoreGameClockMinutes) UnmarshalJSON(data []byte) error {
+	dataStr := string(data)
+	errorStr := fmt.Sprintf("could not unmarshal nba boxscore game clock: %s to json", dataStr)
+	unmarshalError := fmt.Errorf(errorStr)
+
+	err := json.Unmarshal(data, &bgc.boxscoreRawValue)
+	if err != nil {
+		return unmarshalError
+	}
+
+	if bgc.boxscoreRawValue == "" {
+		bgc.Duration = 0
+		return nil
+	}
+
+	minutesSecondsStr := strings.TrimPrefix(bgc.boxscoreRawValue, "PT")
+
+	minutesStr := strings.TrimSuffix(minutesSecondsStr, "M")
+
+	minutes, err := strconv.Atoi(minutesStr)
+	if err != nil {
+		return unmarshalError
+	}
+
+	bgc.boxscoreRawValue = dataStr
+	bgc.Duration = minutes
+
+	return nil
+}
+
+type BoxscoreArena struct {
+	ID       int     `json:"arenaId"`
+	Name     string  `json:"arenaName"`
+	City     *string `json:"arenaCity"`
+	State    *string `json:"arenaState"`    // ex. MN
+	Country  string  `json:"arenaCountry"`  // ex. US
+	Timezone string  `json:"arenaTimezone"` // ex. America/Chicago
+}
+
+type BoxscoreOfficial struct {
+	PersonID     int    `json:"personId"`
+	Name         string `json:"name"`  // ex. Tony Brothers
+	NameI        string `json:"nameI"` // ex. T. Brothers
+	FirstName    string `json:"firstName"`
+	LastName     string `json:"familyName"`
+	JerseyNumber string `json:"jerseyNum"`
+	Assignment   string `json:"assignment"` // ex. [OFFICIAL1, OFFICIAL2, OFFICIAL3]
+}
+
+type BoxscoreTeam struct {
+	ID                int                    `json:"teamId"`
+	Name              string                 `json:"teamName"`
+	City              string                 `json:"teamCity"`
+	Tricode           string                 `json:"teamTricode"`
+	Points            int                    `json:"score"`
+	InBonus           string                 `json:"inBonus"` // ex. [0,1]
+	TimeoutsRemaining int                    `json:"timeoutsRemaining"`
+	Periods           []BoxscorePeriod       `json:"periods"`
+	Players           []BoxscorePlayer       `json:"players"`
+	Statistics        BoxscoreTeamStatistics `json:"statistics"`
+}
+
+type BoxscorePeriod struct {
+	Period     int    `json:"period"`
+	PeriodType string `json:"periodType"` // ex. [REGULAR, OVERTIME?]
+	Points     int    `json:"score"`
+}
+
+type BoxscorePlayer struct {
+	Name                  string                   `json:"name"`  // ex. Jrue Holiday
+	NameI                 string                   `json:"nameI"` // ex. J. Holiday
+	FirstName             string                   `json:"firstName"`
+	LastName              string                   `json:"familyName"`
+	Status                string                   `json:"status"`                // ex. [ACTIVE, INACTIVE]
+	NotPlayingReason      *string                  `json:"notPlayingReason"`      // ex. INACTIVE_INJURY only set if status is INACTIVE
+	NotPlayingDescription *string                  `json:"notPlayingDescription"` // ex. Left Ankle; Surgery only set if status is INACTIVE
+	Order                 int                      `json:"order"`                 // I believe this is the order in which they played e.g. 6 is the 6th man or 1st off the bench
+	ID                    int                      `json:"personId"`
+	JerseyNumber          string                   `json:"jerseyNum"`
+	Position              *string                  `json:"position"` // ex. [PG, SG, SF, PF, C] only set for starters?
+	Starter               string                   `json:"starter"`  // ex. [0,1]
+	OnCourt               string                   `json:"oncourt"`  // ex. [0,1]
+	Played                string                   `json:"played"`   // ex. [0,1]
+	Statistics            BoxscorePlayerStatistics `json:"statistics"`
+}
+
+type BoxscorePlayerStatistics struct {
+	Assists                 int                      `json:"assists"`
+	Blocks                  int                      `json:"blocks"`
+	BlocksReceived          int                      `json:"blocksReceived"` // times the player got blocked?
+	FieldGoalsAttempted     int                      `json:"fieldGoalsAttempted"`
+	FieldGoalsMade          int                      `json:"fieldGoalsMade"`
+	FieldGoalsPercentage    float64                  `json:"fieldGoalsPercentage"` // ex. 0.444444444444444
+	FoulsOffensive          int                      `json:"foulsOffensive"`
+	FoulsDrawn              int                      `json:"foulsDrawn"`
+	FoulsPersonal           int                      `json:"foulsPersonal"`
+	FoulsTechnical          int                      `json:"foulsTechnical"`
+	FreeThrowsAttempted     int                      `json:"freeThrowsAttempted"`
+	FreeThrowsMade          int                      `json:"freeThrowsMade"`
+	FreeThrowsPercentage    float64                  `json:"freeThrowsPercentage"` // ex. 1
+	Minus                   float64                  `json:"minus"`                // boxscore minus
+	Minutes                 duration                 `json:"minutes"`              // ex. PT34M43.00S
+	MinutesCalculated       BoxscoreGameClockMinutes `json:"minutesCalculated"`    // ex. PT35M, PT00M
+	Plus                    float64                  `json:"plus"`                 // boxscore plus
+	PlusMinus               float64                  `json:"plusMinusPoints"`      // boxscore plus minus
+	Points                  int                      `json:"points"`
+	PointsFastBreak         int                      `json:"pointsFastBreak"`
+	PointsInThePaint        int                      `json:"pointsInThePaint"`
+	PointsSecondChance      int                      `json:"pointsSecondChance"`
+	ReboundsDefensive       int                      `json:"reboundsDefensive"`
+	ReboundsOffensive       int                      `json:"reboundsOffensive"`
+	ReboundsTotal           int                      `json:"reboundsTotal"`
+	Steals                  int                      `json:"steals"`
+	ThreePointersAttempted  int                      `json:"threePointersAttempted"`
+	ThreePointersMade       int                      `json:"threePointersMade"`
+	ThreePointersPercentage float64                  `json:"threePointersPercentage"` // ex. 0.2
+	Turnovers               int                      `json:"turnovers"`
+	TwoPointersAttempted    int                      `json:"twoPointersAttempted"`
+	TwoPointersMade         int                      `json:"twoPointersMade"`
+	TwoPointersPercentage   float64                  `json:"twoPointersPercentage"`
+}
+
+type BoxscoreTeamStatistics struct {
+	Assists                      int      `json:"assists"`
+	AssistsToTurnoverRatio       float64  `json:"assistsTurnoverRatio"` // ex. 0.866666666666667
+	BenchPoints                  int      `json:"benchPoints"`
+	BiggestLead                  int      `json:"biggestLead"`
+	BiggestLeadScore             string   `json:"biggestLeadScore"` // ex. 16-29
+	BiggestScoringRun            int      `json:"biggestScoringRun"`
+	BiggestScoringRunScore       string   `json:"biggestScoringRunScore"` // ex. 35-29
+	Blocks                       int      `json:"blocks"`
+	BlocksReceived               int      `json:"blocksReceived"` // times the team got blocked?
+	FastBreakPointsAttempted     int      `json:"fastBreakPointsAttempted"`
+	FastBreakPointsMade          int      `json:"fastBreakPointsMade"`
+	FastBreakPointsPercentage    float64  `json:"fastBreakPointsPercentage"` // ex. 0.375
+	FieldGoalsAttempted          int      `json:"fieldGoalsAttempted"`
+	FieldGoalsEffectiveAdjusted  float64  `json:"fieldGoalsEffectiveAdjusted"` // ex. 0.41538461538461496
+	FieldGoalsMade               int      `json:"fieldGoalsMade"`
+	FieldGoalsPercentage         float64  `json:"fieldGoalsPercentage"` // ex. 0.444444444444444
+	FoulsOffensive               int      `json:"foulsOffensive"`
+	FoulsDrawn                   int      `json:"foulsDrawn"`
+	FoulsPersonal                int      `json:"foulsPersonal"`
+	FoulsTeam                    int      `json:"foulsTeam"`
+	FoulsTechnical               int      `json:"foulsTechnical"`
+	FoulsTeamTechnical           int      `json:"foulsTeamTechnical"`
+	FreeThrowsAttempted          int      `json:"freeThrowsAttempted"`
+	FreeThrowsMade               int      `json:"freeThrowsMade"`
+	FreeThrowsPercentage         float64  `json:"freeThrowsPercentage"` // ex. 1
+	LeadChanges                  int      `json:"leadChanges"`
+	Minutes                      duration `json:"minutes"`           // ex. PT34M43.00S
+	MinutesCalculated            duration `json:"minutesCalculated"` // ex. PT35M, PT00M
+	Points                       int      `json:"points"`
+	PointsAgainst                int      `json:"pointsAgainst"`
+	PointsFastBreak              int      `json:"pointsFastBreak"`
+	PointsOffTurnovers           int      `json:"pointsFromTurnovers"`
+	PointsInThePaint             int      `json:"pointsInThePaint"`
+	PointsInThePaintAttempted    int      `json:"pointsInThePaintAttempted"`
+	PointsInThePaintMade         int      `json:"pointsInThePaintMade"`
+	PointsInThePaintPercentage   float64  `json:"pointsInThePaintPercentage"` // ex. 0.5
+	PointsSecondChance           int      `json:"pointsSecondChance"`
+	PointsSecondChanceAttempted  int      `json:"secondChancePointsAttempted"`
+	PointsSecondChanceMade       int      `json:"secondChancePointsMade"`
+	PointsSecondChancePercentage float64  `json:"secondChancePointsPercentage"`
+	ReboundsDefensive            int      `json:"reboundsDefensive"`
+	ReboundsOffensive            int      `json:"reboundsOffensive"`
+	ReboundsPersonal             int      `json:"reboundsPersonal"` // rebounds made by one player?
+	ReboundsTeam                 int      `json:"reboundsTeam"`     // from nba.com No individual rebound is credited in situations where the whistle stops play before there is player possession following a shot attempt. Instead only a team rebound is credited to the team that gains possession following a stop in play. For example, if the ball goes out of bounds after the field goal attempt, a team rebound is awarded to the team in white since no player secured possession.
+	ReboundsTeamDefensive        int      `json:"reboundsTeamDefensive"`
+	ReboundsTeamOffensive        int      `json:"reboundsTeamOffensive"`
+	ReboundsTotal                int      `json:"reboundsTotal"`
+	Steals                       int      `json:"steals"`
+	ThreePointersAttempted       int      `json:"threePointersAttempted"`
+	ThreePointersMade            int      `json:"threePointersMade"`
+	ThreePointersPercentage      float64  `json:"threePointersPercentage"` // ex. 0.2
+	TimeLeading                  duration `json:"timeLeading"`             // ex. PT09M26.00S
+	TimesTied                    int      `json:"timesTied"`
+	TrueShootingAttempts         float64  `json:"trueShootingAttempts"`   // ex. 71.72
+	TrueShootingPercentage       float64  `json:"trueShootingPercentage"` // ex. 0.53680981595092
+	Turnovers                    int      `json:"turnovers"`
+	TurnoversTeam                int      `json:"turnoversTeam"` // 5 second inbound violation, 24 second shot clock violation or others not attributable to a single player
+	TurnoversTotal               int      `json:"turnoversTotal"`
+	TwoPointersAttempted         int      `json:"twoPointersAttempted"`
+	TwoPointersMade              int      `json:"twoPointersMade"`
+	TwoPointersPercentage        float64  `json:"twoPointersPercentage"`
+}
+
+type BoxscoreOld struct {
 	StatsNode *struct {
-		HomeTeamNode struct {
-			TeamStats TeamStats `json:"totals"`
-		} `json:"hTeam"`
-		AwayTeamNode struct {
-			TeamStats TeamStats `json:"totals"`
-		} `json:"vTeam"`
+		LeadChanges  string        `json:"leadChanges"`
+		TimesTied    string        `json:"timesTied"`
+		HomeTeamNode TeamStats     `json:"hTeam"`
+		AwayTeamNode TeamStats     `json:"vTeam"`
 		PlayersStats []PlayerStats `json:"activePlayers"`
 	} `json:"stats,omitempty"`
 	BasicGameDataNode struct {
+		LeagueName           string            `json:"leagueName"` // ex. standard, vegas, sacramento, etc.
+		StatusNum            int               `json:"statusNum"`  // 1 - upcoming 2 - started 3 - completed
+		SeasonYear           string            `json:"seasonYear"` // ex. 2022
+		GameID               string            `json:"gameId"`
 		Arena                ArenaInfo         `json:"arena"`
 		Attendance           string            `json:"attendance"`
 		Clock                string            `json:"clock"`
 		GameIsActivated      bool              `json:"isGameActivated"` // see UpdateTeamsRegularSeasonRecords
 		GameStartTimeEastern string            `json:"startTimeEastern"`
 		GameStartDateEastern string            `json:"startDateEastern"`
-		GameEndTimeUTC       string            `json:"endTimeUTC,omitempty"`
+		GameStartTimeUTC     datetime          `json:"startTimeUTC"`
+		GameEndTimeUTC       *time.Time        `json:"endTimeUTC,omitempty"`
 		HomeTeamInfo         TeamBoxscoreInfo  `json:"hTeam"`
 		AwayTeamInfo         TeamBoxscoreInfo  `json:"vTeam"`
 		PlayoffsNode         *PlayoffsGameInfo `json:"playoffs,omitempty"`
 		// season stage IDs
 		// 1: preseason
 		// 2: regular season
-		// 3: playoffs
+		// 3: all star
+		// 4: playoffs
+		// 5: play in
 		SeasonStage seasonStage `json:"seasonStageId"`
+
+		GameDurationNode *struct {
+			Hours   string `json:"hours"`
+			Minutes string `json:"minutes"`
+		} `json:"gameDuration"`
 
 		PeriodNode struct {
 			CurrentPeriod int `json:"current"`
@@ -61,27 +292,31 @@ type Boxscore struct {
 	} `json:"basicGameData"`
 }
 
-func (b *Boxscore) IsPlayoffGame() bool {
+func (b *BoxscoreOld) IsPlayoffGame() bool {
 	return b.BasicGameDataNode.SeasonStage == postSeason || b.BasicGameDataNode.PlayoffsNode != nil
 }
 
-func (b *Boxscore) GameEnded() bool {
+func (b *BoxscoreOld) Final() bool {
+	return b.BasicGameDataNode.StatusNum == 3
+}
+
+func (b *BoxscoreOld) GameEnded() bool {
 	if b.StatsNode == nil {
 		// the nba api will post a boxscore without the stats json node for some time before games
 		return false
 	}
-	hasEndTime := b.BasicGameDataNode.GameEndTimeUTC != ""
+	hasEndTime := b.BasicGameDataNode.GameEndTimeUTC != nil
 	if hasEndTime {
 		log.Println("endTimeUTC reported")
 		return true
 	}
 	noTimeRemaining := b.BasicGameDataNode.Clock == "0.0" || b.BasicGameDataNode.Clock == ""
 
-	homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
+	homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStatsTotals.Points)
 	if err != nil {
 		log.Fatal("could not convert home team points to int")
 	}
-	awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
+	awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStatsTotals.Points)
 	if err != nil {
 		log.Fatal("could not convert away team points to int")
 	}
@@ -99,7 +334,7 @@ func (b *Boxscore) GameEnded() bool {
 	return false
 }
 
-func (b *Boxscore) DurationUntilGameStarts() time.Duration {
+func (b *BoxscoreOld) DurationUntilGameStarts() (time.Duration, error) {
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
@@ -109,12 +344,15 @@ func (b *Boxscore) DurationUntilGameStarts() time.Duration {
 	}
 	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
 
-	gameTime := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	gameTime, err := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	if err != nil {
+		return *new(time.Duration), err
+	}
 
-	return gameTime.Sub(currentTimeEastern)
+	return gameTime.Sub(currentTimeEastern), nil
 }
 
-func (b *Boxscore) GameStarted() bool {
+func (b *BoxscoreOld) GameStarted() (bool, error) {
 	currentTimeUTC := time.Now().UTC()
 	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
 	// when the eastern time rolls over into the next day
@@ -124,15 +362,18 @@ func (b *Boxscore) GameStarted() bool {
 	}
 	currentTimeEastern := currentTimeUTC.In(eastCoastLocation)
 
-	gameTime := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	gameTime, err := makeGoTimeFromAPIData(b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern)
+	if err != nil {
+		return false, err
+	}
 
 	if currentTimeEastern.After(gameTime) {
-		return true
+		return true, nil
 	}
-	return false
+	return false, nil
 }
 
-func (b *Boxscore) GetOpponent(team TriCode) TriCode {
+func (b *BoxscoreOld) GetOpponent(team TriCode) TriCode {
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == team {
 		return b.BasicGameDataNode.AwayTeamInfo.TriCode
 	} else {
@@ -156,7 +397,7 @@ func incrementString(str string) string {
 	return str
 }
 
-func (b *Boxscore) UpdateTeamsRegularSeasonRecords(currentGameNumber int) {
+func (b *BoxscoreOld) UpdateTeamsRegularSeasonRecords(currentGameNumber int) {
 	if b.IsPlayoffGame() {
 		return
 	}
@@ -188,11 +429,11 @@ func (b *Boxscore) UpdateTeamsRegularSeasonRecords(currentGameNumber int) {
 
 	log.Println("Updating team regular season records")
 
-	homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
+	homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStatsTotals.Points)
 	if err != nil {
 		log.Fatal("could not convert home regular season points to int")
 	}
-	awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
+	awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStatsTotals.Points)
 	if err != nil {
 		log.Fatal("could not convert away regular season points to int")
 	}
@@ -211,7 +452,7 @@ func (b *Boxscore) UpdateTeamsRegularSeasonRecords(currentGameNumber int) {
 	}
 }
 
-func (b *Boxscore) UpdateTeamsPlayoffsSeriesRecords() {
+func (b *BoxscoreOld) UpdateTeamsPlayoffsSeriesRecords() {
 	if !b.IsPlayoffGame() {
 		return
 	}
@@ -234,11 +475,11 @@ func (b *Boxscore) UpdateTeamsPlayoffsSeriesRecords() {
 	if (homeWins + awayWins) != gameInSeries {
 		log.Println("updating playoff series records")
 
-		homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStats.Points)
+		homeTeamPoints, err := strconv.Atoi(b.StatsNode.HomeTeamNode.TeamStatsTotals.Points)
 		if err != nil {
 			log.Fatal("could not convert home playoff points to int")
 		}
-		awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStats.Points)
+		awayTeamPoints, err := strconv.Atoi(b.StatsNode.AwayTeamNode.TeamStatsTotals.Points)
 		if err != nil {
 			log.Fatal("could not convert away playoff points to int")
 		}
@@ -344,7 +585,10 @@ func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDat
 	gameInfoTableString += fmt.Sprintf("|**Location**|%s, %s|\n", city, country)
 	gameInfoTableString += fmt.Sprintf("|**Attendance**|%s|\n", attendance)
 
-	gameTimeEastern := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
+	gameTimeEastern, err := makeGoTimeFromAPIData(startTimeEastern, startDateEastern)
+	if err != nil {
+		log.Fatal(err)
+	}
 	centralLocation, locationErr := time.LoadLocation("America/Chicago")
 	if locationErr != nil {
 		log.Fatal("Failed to load Minneapolis location")
@@ -379,7 +623,7 @@ func getGameInfoTableString(arenaName, city, country, startTimeEastern, startDat
 	return gameInfoTableString
 }
 
-func getTeamQuarterScoreTableString(homeTeamBoxscoreInfo TeamBoxscoreInfo, homeTeamStats TeamStats, awayTeamBoxscoreInfo TeamBoxscoreInfo, awayTeamStats TeamStats) string {
+func getTeamQuarterScoreTableString(homeTeamBoxscoreInfo TeamBoxscoreInfo, homeTeamStats TeamStatsTotals, awayTeamBoxscoreInfo TeamBoxscoreInfo, awayTeamStats TeamStatsTotals) string {
 	if len(homeTeamBoxscoreInfo.PointsByQuarter) != len(awayTeamBoxscoreInfo.PointsByQuarter) {
 		log.Fatal("Home team and away team line scores are different lengths")
 	}
@@ -462,7 +706,7 @@ func getTeamLeadersTableString(homeTeamBoxscoreInfo TeamBoxscoreInfo, homeTeamLe
 	return teamLeadersTableString
 }
 
-func getTeamStatsTableString(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamStats, players map[string]Player, playersStats []PlayerStats) string {
+func getTeamStatsTableString(teamBoxscoreInfo TeamBoxscoreInfo, teamStats TeamStatsTotals, players map[string]Player, playersStats []PlayerStats) string {
 	columnHeader := "|**[](/%s) %s**|**MIN**|**PTS**|**FG**|**3PT**|**FT**|**OREB**|**REB**|**AST**|**TOV**|**STL**|**BLK**|**PF**|**+/-**|\n"
 	columnHeaderSeparator := "|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n"
 	playerStatsString := "|%s|%s|%s|%s-%s|%s-%s|%s-%s|%s|%s|%s|%s|%s|%s|%s|%s|\n"
@@ -559,44 +803,44 @@ func getBroadcastInfoTable(gameVideoBroadcastInfo GameVideoBroadcastInfo, nation
 	return broadcastInfoTable
 }
 
-func (b *Boxscore) GetRedditPostGameThreadBodyString(players map[string]Player, gameThreadURL string) string {
+func (b *BoxscoreOld) GetRedditPostGameThreadBodyString(players map[string]Player, gameThreadURL string) string {
 	body := ""
 	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance, false /*gameThread*/, gameThreadURL)
 	body += "\n"
 	body += getBroadcastInfoTable(b.BasicGameDataNode.WatchNode.BroadcastNode.VideoBroadcastInfo, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.NationalVideoFeeds, b.BasicGameDataNode.HomeTeamInfo.TriCode, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.HomeTeamVideoFeeds, b.BasicGameDataNode.AwayTeamInfo.TriCode, b.BasicGameDataNode.WatchNode.BroadcastNode.BroadcastersNode.AwayTeamVideoFeeds)
 	body += "\n"
-	body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
+	body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStatsTotals, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStatsTotals)
 	body += "\n"
 
 	homeTeamLeaders, awayTeamLeaders := getTeamLeaders(b.StatsNode.PlayersStats, b.BasicGameDataNode.HomeTeamInfo.TeamID, b.BasicGameDataNode.AwayTeamInfo.TeamID)
 	body += getTeamLeadersTableString(b.BasicGameDataNode.HomeTeamInfo, homeTeamLeaders, b.BasicGameDataNode.AwayTeamInfo, awayTeamLeaders, players)
 	body += "\n"
 
-	body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStatsTotals, players, b.StatsNode.PlayersStats)
 	body += "\n"
-	body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+	body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStatsTotals, players, b.StatsNode.PlayersStats)
 	body += "\n"
 	body += getRefereeTableString(b.BasicGameDataNode.RefereeNode.Referees)
 	body += "\n"
 	return body
 }
 
-func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
+func (b *BoxscoreOld) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams []Team) string {
 	title := ""
 	firstTeam := Team{}
-	firstTeamStats := TeamStats{}
+	firstTeamStats := TeamStatsTotals{}
 	firstTeamInfo := TeamBoxscoreInfo{}
 	firstTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	secondTeam := Team{}
-	secondTeamStats := TeamStats{}
+	secondTeamStats := TeamStatsTotals{}
 	secondTeamInfo := TeamBoxscoreInfo{}
 	secondTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
-		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
-		firstTeamStats = b.StatsNode.HomeTeamNode.TeamStats
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
+		firstTeamStats = b.StatsNode.HomeTeamNode.TeamStatsTotals
 		firstTeamInfo = b.BasicGameDataNode.HomeTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
-		secondTeamStats = b.StatsNode.AwayTeamNode.TeamStats
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
+		secondTeamStats = b.StatsNode.AwayTeamNode.TeamStatsTotals
 		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
 
 		if b.IsPlayoffGame() {
@@ -604,11 +848,11 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
 		}
 	} else {
-		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
-		firstTeamStats = b.StatsNode.AwayTeamNode.TeamStats
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
+		firstTeamStats = b.StatsNode.AwayTeamNode.TeamStatsTotals
 		firstTeamInfo = b.BasicGameDataNode.AwayTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
-		secondTeamStats = b.StatsNode.HomeTeamNode.TeamStats
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
+		secondTeamStats = b.StatsNode.HomeTeamNode.TeamStatsTotals
 		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
 
 		if b.IsPlayoffGame() {
@@ -757,7 +1001,7 @@ func (b *Boxscore) GetRedditPostGameThreadTitle(teamTriCode TriCode, teams map[T
 	return title
 }
 
-func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, postGameThreadURL string) string {
+func (b *BoxscoreOld) GetRedditGameThreadBodyString(players map[string]Player, postGameThreadURL string) string {
 	body := ""
 	body += getGameInfoTableString(b.BasicGameDataNode.Arena.Name, b.BasicGameDataNode.Arena.City, b.BasicGameDataNode.Arena.Country, b.BasicGameDataNode.GameStartTimeEastern, b.BasicGameDataNode.GameStartDateEastern, b.BasicGameDataNode.Attendance, true /*gameThread*/, postGameThreadURL)
 	body += "\n"
@@ -766,7 +1010,7 @@ func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, post
 
 	if b.StatsNode != nil {
 		if len(b.BasicGameDataNode.HomeTeamInfo.PointsByQuarter) > 0 && len(b.BasicGameDataNode.AwayTeamInfo.PointsByQuarter) > 0 {
-			body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats)
+			body += getTeamQuarterScoreTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStatsTotals, b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStatsTotals)
 			body += "\n"
 		}
 
@@ -774,9 +1018,9 @@ func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, post
 		body += getTeamLeadersTableString(b.BasicGameDataNode.HomeTeamInfo, homeTeamLeaders, b.BasicGameDataNode.AwayTeamInfo, awayTeamLeaders, players)
 		body += "\n"
 
-		body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+		body += getTeamStatsTableString(b.BasicGameDataNode.HomeTeamInfo, b.StatsNode.HomeTeamNode.TeamStatsTotals, players, b.StatsNode.PlayersStats)
 		body += "\n"
-		body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStats, players, b.StatsNode.PlayersStats)
+		body += getTeamStatsTableString(b.BasicGameDataNode.AwayTeamInfo, b.StatsNode.AwayTeamNode.TeamStatsTotals, players, b.StatsNode.PlayersStats)
 		body += "\n"
 	}
 
@@ -785,7 +1029,17 @@ func (b *Boxscore) GetRedditGameThreadBodyString(players map[string]Player, post
 	return body
 }
 
-func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCode]Team) string {
+func findTeamWithTricode(tricode TriCode, teams []Team) Team {
+	for _, t := range teams {
+		if t.TriCode == tricode {
+			return t
+		}
+	}
+	log.Println("cannot find team in teams slice with tricode: " + tricode)
+	return Team{}
+}
+
+func (b *BoxscoreOld) GetRedditGameThreadTitle(teamTriCode TriCode, teams []Team) string {
 	title := ""
 	firstTeam := Team{}
 	firstTeamInfo := TeamBoxscoreInfo{}
@@ -794,9 +1048,9 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 	secondTeamInfo := TeamBoxscoreInfo{}
 	secondTeamPlayoffsGameTeamInfo := PlayoffsGameTeamInfo{}
 	if b.BasicGameDataNode.HomeTeamInfo.TriCode == teamTriCode {
-		firstTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
 		firstTeamInfo = b.BasicGameDataNode.HomeTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
 		secondTeamInfo = b.BasicGameDataNode.AwayTeamInfo
 
 		if b.IsPlayoffGame() {
@@ -804,9 +1058,9 @@ func (b *Boxscore) GetRedditGameThreadTitle(teamTriCode TriCode, teams map[TriCo
 			secondTeamPlayoffsGameTeamInfo = b.BasicGameDataNode.PlayoffsNode.AwayTeamInfo
 		}
 	} else {
-		firstTeam = teams[b.BasicGameDataNode.AwayTeamInfo.TriCode]
+		firstTeam = findTeamWithTricode(b.BasicGameDataNode.AwayTeamInfo.TriCode, teams)
 		firstTeamInfo = b.BasicGameDataNode.AwayTeamInfo
-		secondTeam = teams[b.BasicGameDataNode.HomeTeamInfo.TriCode]
+		secondTeam = findTeamWithTricode(b.BasicGameDataNode.HomeTeamInfo.TriCode, teams)
 		secondTeamInfo = b.BasicGameDataNode.HomeTeamInfo
 
 		if b.IsPlayoffGame() {
@@ -904,14 +1158,24 @@ type TeamBoxscoreInfo struct {
 	Losses          string  `json:"loss"`
 	SeriesWins      string  `json:"seriesWin"`
 	SeriesLosses    string  `json:"seriesLoss"`
+	Points          string  `json:"score"`
 	PointsByQuarter []struct {
 		Points string `json:"score"`
 	} `json:"linescore"`
 }
 
 type TeamStats struct {
+	BiggestLead        string          `json:"biggestLead"`
+	LongestRun         string          `json:"longestRun"`
+	PointsInPaint      string          `json:"pointsInPaint"`
+	PointsOffTurnovers string          `json:"pointsOffTurnovers"`
+	SecondChancePoints string          `json:"secondChancePoints"`
+	TeamStatsTotals    TeamStatsTotals `json:"totals"`
+}
+
+type TeamStatsTotals struct {
 	Points               string      `json:"points"`
-	Minutes              string      `json:"min"`
+	Minutes              duration    `json:"min"`
 	FieldGoalsMade       string      `json:"fgm"`
 	FieldGoalsAttempted  string      `json:"fga"`
 	FieldGoalPercentage  string      `json:"fgp"`
@@ -1011,25 +1275,48 @@ type GameVideoBroadcastInfo struct {
 	LeaguePass bool `json:"isLeaguePass"`
 }
 
-func GetBoxscore(boxscoreAPIPath, todaysDate string, gameID string) Boxscore {
-	templateURI := makeURIFormattable(nbaAPIBaseURI + boxscoreAPIPath)
-	url := fmt.Sprintf(templateURI, todaysDate, gameID)
-	log.Println(url)
-	response, httpErr := http.Get(url)
+func (b *Boxscore) Final() bool {
+	return b.GameNode.GameStatus == 3
+}
 
-	defer func() {
-		response.Body.Close()
-		io.Copy(ioutil.Discard, response.Body)
-	}()
+// old boxscore exists for every game current and scheduled with a gameId
+func GetCurrentSeasonBoxscore(ctx context.Context, r2Client cloudflare.Client, bucket string, gameID, gameDate string) (BoxscoreOld, error) {
+	dailyAPIPaths, err := GetDailyAPIPaths()
+	if err != nil {
+		return BoxscoreOld{}, err
+	}
+	seasonStartYear := dailyAPIPaths.APISeasonInfoNode.SeasonYear
+	return GetOldBoxscore(ctx, r2Client, bucket, gameID, gameDate, seasonStartYear)
+}
 
-	if httpErr != nil {
-		log.Fatal(httpErr)
+func GetOldBoxscore(ctx context.Context, r2Client cloudflare.Client, bucket string, gameID, gameDate string, seasonStartYear int) (BoxscoreOld, error) {
+	filename := fmt.Sprintf(os.Getenv("STORAGE_PATH")+"/boxscoreold/%d/%s.json", seasonStartYear, gameID)
+
+	// remove all -'s in the game date. YYYY-mm-dd is a proper format but the old boxscore url uses no -'s like YYYYmmdd
+	url := fmt.Sprintf(OldBoxscoreURL, strings.ReplaceAll(gameDate, "-", ""), gameID)
+
+	objectKey := fmt.Sprintf("boxscore/%d/%s_data", seasonStartYear, gameID)
+
+	boxscore, err := fetchObjectFromFileOrURL[BoxscoreOld](ctx, r2Client, url, filename, bucket, objectKey, func(b BoxscoreOld) bool { return b.Final() })
+	if err != nil {
+		return BoxscoreOld{}, err
 	}
 
-	boxscoreResult := Boxscore{}
-	decodeErr := json.NewDecoder(response.Body).Decode(&boxscoreResult)
-	if decodeErr != nil {
-		log.Fatal(decodeErr)
+	return boxscore, nil
+}
+
+// preferred: new boxscore with more stats, details, ids. however, returns error if game is in the future
+func GetBoxscoreDetailed(ctx context.Context, r2Client cloudflare.Client, bucket string, gameID string, seasonStartYear int) (Boxscore, error) {
+	filename := fmt.Sprintf(os.Getenv("STORAGE_PATH")+"/boxscore/%d/%s.json", seasonStartYear, gameID)
+
+	url := fmt.Sprintf(BoxscoreURL, gameID)
+
+	objectKey := fmt.Sprintf("boxscore/%d/%s_cdn", seasonStartYear, gameID)
+
+	boxscore, err := fetchObjectFromFileOrURL[Boxscore](ctx, r2Client, url, filename, bucket, objectKey, func(b Boxscore) bool { return b.Final() })
+	if err != nil {
+		return Boxscore{}, err
 	}
-	return boxscoreResult
+
+	return boxscore, nil
 }

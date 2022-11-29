@@ -1,9 +1,13 @@
 package gt
 
 import (
-	"log"
+	"context"
 	"sync"
 	"time"
+
+	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/drewthor/wolves_reddit_bot/util"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
@@ -22,24 +26,46 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	currentTimeWestern := currentTimeUTC.In(westCoastLocation)
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
 	log.Println(currentDateWestern)
-	dailyAPIPaths := nba.GetDailyAPIPaths()
-	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	team, foundTeam := teams[teamTriCode]
-	if !foundTeam {
+	dailyAPIInfo, err := nba.GetDailyAPIPaths()
+	if err != nil {
+		log.Fatal(err)
+	}
+	dailyAPIPaths := dailyAPIInfo.APIPaths
+	teams, err := nba.GetTeams(dailyAPIPaths.Teams)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var team *nba.Team
+	for _, t := range teams {
+		if t.TriCode == teamTriCode {
+			team = &t
+		}
+	}
+	if team == nil {
 		log.Println("failed to find team with TriCode: " + teamTriCode)
 		return
 	}
-	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, team.ID)
+	scheduledGames, err := nba.GetCurrentTeamSchedule(dailyAPIPaths.TeamSchedule, team.ID)
+	if err != nil {
+		log.Fatal(err)
+	}
 	todaysGame, gameToday := scheduledGames[currentDateWestern]
 
 	if gameToday {
 		log.Println("game today")
-		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		boxscore, err := nba.GetCurrentSeasonBoxscore(context.Background(), cloudflare.Client{}, util.NBAR2Bucket, todaysGame.GameID, currentDateWestern)
+		if err != nil {
+			log.Fatal(err)
+		}
 		datastore := new(gcloud.Datastore)
 		gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
-		subreddit := "Timberwolves"
+		subreddit := "SeattleSockeye"
 
-		if (boxscore.DurationUntilGameStarts().Hours() < 1) && !boxscore.GameEnded() {
+		durationUntilGameStarts, err := boxscore.DurationUntilGameStarts()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if (durationUntilGameStarts.Hours() < 1) && !boxscore.GameEnded() {
 			log.Println("game in progress")
 
 			log.Println("making post")
@@ -47,7 +73,15 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient.Authorize()
 			log.Println("authorized")
 			title := boxscore.GetRedditGameThreadTitle(teamTriCode, teams)
-			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), "" /*postGameThreadURL*/)
+			players, err := nba.GetPlayers(dailyAPIInfo.APISeasonInfoNode.SeasonYear)
+			if err != nil {
+				log.Fatal(err)
+			}
+			playersMap := map[string]nba.Player{}
+			for _, player := range players {
+				playersMap[player.ID] = player
+			}
+			content := boxscore.GetRedditGameThreadBodyString(playersMap, "" /*postGameThreadURL*/)
 
 			if exists && gameEvent.GameThread {
 				log.Println("updating post")
@@ -69,7 +103,15 @@ func CreateGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient.Authorize()
 			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.PostGameThreadRedditPostFullname}, subreddit)
 			postGameThreadURL := thingURLMapping[gameEvent.PostGameThreadRedditPostFullname]
-			content := boxscore.GetRedditGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), postGameThreadURL)
+			players, err := nba.GetPlayers(dailyAPIInfo.APISeasonInfoNode.SeasonYear)
+			if err != nil {
+				log.Fatal(err)
+			}
+			playersMap := map[string]nba.Player{}
+			for _, player := range players {
+				playersMap[player.ID] = player
+			}
+			content := boxscore.GetRedditGameThreadBodyString(playersMap, postGameThreadURL)
 			redditClient.UpdateUserText(gameEvent.GameThreadRedditPostFullname, content)
 			gameEvent.GameThreadComplete = true
 			datastore.SaveTeamGameEvent(gameEvent)

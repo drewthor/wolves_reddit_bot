@@ -1,9 +1,13 @@
 package pgt
 
 import (
-	"log"
+	"context"
 	"sync"
 	"time"
+
+	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/drewthor/wolves_reddit_bot/util"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/apis/reddit"
@@ -13,28 +17,47 @@ import (
 func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 	defer wg.Done()
 	currentTimeUTC := time.Now().UTC()
-	// Issues occur when using eastern time for "today's games" as games on the west coast can still be going on
-	// when the eastern time rolls over into the next day
 	westCoastLocation, locationError := time.LoadLocation("America/Los_Angeles")
 	if locationError != nil {
 		log.Fatal(locationError)
 	}
 	currentTimeWestern := currentTimeUTC.In(westCoastLocation)
 	currentDateWestern := currentTimeWestern.Format(nba.TimeDayFormat)
-	dailyAPIPaths := nba.GetDailyAPIPaths()
-	teams := nba.GetTeams(dailyAPIPaths.Teams)
-	team, foundTeam := teams[teamTriCode]
-	if !foundTeam {
+	dailyAPIInfo, err := nba.GetDailyAPIPaths()
+	if err != nil {
+		log.Fatal(err)
+	}
+	dailyAPIPaths := dailyAPIInfo.APIPaths
+	teams, err := nba.GetTeams(dailyAPIPaths.Teams)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var team *nba.Team
+	for _, t := range teams {
+		if t.TriCode == teamTriCode {
+			team = &t
+		}
+	}
+	if team == nil {
 		log.Println("failed to find team with TriCode: " + teamTriCode)
 		return
 	}
-	scheduledGames := nba.GetScheduledGames(dailyAPIPaths.TeamSchedule, team.ID)
+	scheduledGames, err := nba.GetCurrentTeamSchedule(dailyAPIPaths.TeamSchedule, team.ID)
+	if err != nil {
+		log.Fatal(err)
+	}
 	todaysGame, gameToday := scheduledGames[currentDateWestern]
 	log.Println("checked for game")
 	if gameToday {
 		log.Println("game today")
-		todaysGameScoreboard := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateWestern, todaysGame.GameID)
-		boxscore := nba.GetBoxscore(dailyAPIPaths.Boxscore, currentDateWestern, todaysGame.GameID)
+		todaysGameScoreboard, err := nba.GetGameScoreboard(dailyAPIPaths.Scoreboard, currentDateWestern, todaysGame.GameID)
+		if err != nil {
+			log.Fatal(err)
+		}
+		boxscore, err := nba.GetCurrentSeasonBoxscore(context.Background(), cloudflare.Client{}, util.NBAR2Bucket, todaysGame.GameID, currentDateWestern)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if boxscore.GameEnded() {
 			log.Println("game ended")
 			// the nba api sometimes has not updated the record for the teams right at the end of games
@@ -45,12 +68,8 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 				boxscore.UpdateTeamsRegularSeasonRecords(currentGameNumber)
 				boxscore.UpdateTeamsPlayoffsSeriesRecords()
 			}
-			if todaysGameScoreboard.EndTimeUTC != "" {
-				gameEndTimeUTC, err := time.Parse(nba.UTCFormat, todaysGameScoreboard.EndTimeUTC)
-				if err != nil {
-					log.Fatal(err)
-				}
-				log.Println(gameEndTimeUTC)
+			if !todaysGameScoreboard.EndTimeUTC.IsZero() {
+				log.Println(todaysGameScoreboard.EndTimeUTC)
 			}
 			datastore := new(gcloud.Datastore)
 			gameEvent, exists := datastore.GetTeamGameEvent(todaysGame.GameID, team.ID)
@@ -62,11 +81,19 @@ func CreatePostGameThread(teamTriCode nba.TriCode, wg *sync.WaitGroup) {
 			redditClient := reddit.Client{}
 			redditClient.Authorize()
 			log.Println("authorized")
-			subreddit := "Timberwolves"
+			subreddit := "SeattleSockeye"
 			title := boxscore.GetRedditPostGameThreadTitle(teamTriCode, teams)
 			thingURLMapping := redditClient.GetThingURLs([]string{gameEvent.GameThreadRedditPostFullname}, subreddit)
 			gameThreadURL := thingURLMapping[gameEvent.GameThreadRedditPostFullname]
-			content := boxscore.GetRedditPostGameThreadBodyString(nba.GetPlayers(dailyAPIPaths.Players), gameThreadURL)
+			players, err := nba.GetPlayers(dailyAPIInfo.APISeasonInfoNode.SeasonYear)
+			if err != nil {
+				log.Fatal(err)
+			}
+			playersMap := map[string]nba.Player{}
+			for _, player := range players {
+				playersMap[player.ID] = player
+			}
+			content := boxscore.GetRedditPostGameThreadBodyString(playersMap, gameThreadURL)
 			submitResponse := redditClient.SubmitNewPost(subreddit, title, content)
 			gameEvent.PostGameThreadRedditPostFullname = submitResponse.JsonNode.DataNode.Fullname
 
