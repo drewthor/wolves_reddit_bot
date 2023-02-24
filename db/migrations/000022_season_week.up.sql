@@ -12,7 +12,7 @@ create table season_week
     unique (season_id, end_date)
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on season_week
     for each row

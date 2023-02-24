@@ -1,1 +1,1 @@
-drop table arena;
+drop table if exists arena;

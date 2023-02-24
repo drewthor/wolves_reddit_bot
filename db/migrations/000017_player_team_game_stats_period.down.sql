@@ -1,1 +1,1 @@
-drop table player_team_game_stats_period;
+drop table if exists player_team_game_stats_period;

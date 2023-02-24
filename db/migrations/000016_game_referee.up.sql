@@ -11,7 +11,7 @@ create table game_referee
     unique (game_id, referee_id)
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on game_referee
     for each row

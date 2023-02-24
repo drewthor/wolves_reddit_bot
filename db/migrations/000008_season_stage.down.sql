@@ -1,1 +1,1 @@
-drop table season_stage;
+drop table if exists season_stage;

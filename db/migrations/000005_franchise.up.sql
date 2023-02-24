@@ -13,7 +13,7 @@ create table franchise
     active     boolean                                            not null
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on franchise
     for each row

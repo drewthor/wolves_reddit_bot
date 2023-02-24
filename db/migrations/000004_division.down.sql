@@ -1,1 +1,1 @@
-drop table division;
+drop table if exists division;

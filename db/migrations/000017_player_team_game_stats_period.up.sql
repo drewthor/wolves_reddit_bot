@@ -32,7 +32,7 @@ create table player_team_game_stats_period
     unique (game_id, team_id, player_id, period)
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on player_team_game_stats_period
     for each row

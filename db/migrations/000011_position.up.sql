@@ -13,7 +13,7 @@ values ('guard'),
        ('forward'),
        ('center');
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on position
     for each row

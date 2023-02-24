@@ -11,7 +11,7 @@ create table player_position
     unique (player_id, position_id, priority)
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on player_position
     for each row

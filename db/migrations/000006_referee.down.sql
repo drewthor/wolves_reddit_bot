@@ -1,1 +1,1 @@
-drop table referee;
+drop table if exists referee;

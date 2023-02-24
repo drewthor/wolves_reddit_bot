@@ -1,1 +1,1 @@
-drop table conference;
+drop table if exists conference;

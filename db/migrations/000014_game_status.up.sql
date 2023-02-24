@@ -8,7 +8,7 @@ create table game_status
     name       text                                               not null unique
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on game_status
     for each row

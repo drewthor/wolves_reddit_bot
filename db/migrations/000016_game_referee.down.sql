@@ -1,1 +1,1 @@
-drop table game_referee;
+drop table if exists game_referee;

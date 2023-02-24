@@ -66,7 +66,7 @@ create table team_game_stats_total
     unique (game_id, team_id)
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on team_game_stats_total
     for each row

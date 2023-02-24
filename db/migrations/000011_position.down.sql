@@ -1,1 +1,1 @@
-drop table position;
+drop table if exists position;

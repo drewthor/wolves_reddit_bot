@@ -38,7 +38,7 @@ func (h *handler) Routes() chi.Router {
 }
 
 func (h *handler) List(w http.ResponseWriter, r *http.Request) {
-	teams, err := h.TeamService.ListPlayers(r.Context())
+	teams, err := h.TeamService.ListTeams(r.Context())
 
 	if err != nil {
 		log.Error(err)

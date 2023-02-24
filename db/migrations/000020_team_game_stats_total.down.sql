@@ -1,1 +1,1 @@
-drop table team_game_stats_total;
+drop table if exists team_game_stats_total;

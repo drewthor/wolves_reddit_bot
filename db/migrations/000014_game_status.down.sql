@@ -1,1 +1,1 @@
-drop table game_status;
+drop table if exists game_status;

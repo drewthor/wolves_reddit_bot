@@ -132,7 +132,7 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 
 	boxscoreResults := make(chan boxscoreComposite, len(gameUpdateRequests))
 
-	wg := sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 	maxConcurrentCalls := 5
 	sem := make(chan int, maxConcurrentCalls)
 
@@ -163,9 +163,9 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 		boxscoreResults <- composite
 	}
 
-	for _, gameUpdateRequest := range gameUpdateRequests {
+	for _, gur := range gameUpdateRequests {
 		wg.Add(1)
-		go worker(gameUpdateRequest, boxscoreResults)
+		go worker(gur, boxscoreResults)
 	}
 
 	go func() {
@@ -180,6 +180,7 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 	var teamGameStatsTotalUpdates []team_game_stats.TeamGameStatsTotalUpdate
 	var gameRefereeUpdates []game_referee.GameRefereeUpdate
 	var leagueUpdates []league.LeagueUpdate
+	teamIDsMap := make(map[int]bool)
 
 	gameStatusNameMappings := util.NBAGameStatusNameMappings()
 	seasonStageNameMappings := util.NBASeasonStageNameMappings()
@@ -458,6 +459,8 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 			gameUpdates = append(gameUpdates, gameUpdate)
 
 			for _, teamData := range []nba.BoxscoreTeam{boxscore.GameNode.HomeTeam, boxscore.GameNode.AwayTeam} {
+				teamIDsMap[teamData.ID] = true
+
 				teamGameStatsTotalUpdate := team_game_stats.TeamGameStatsTotalUpdate{
 					NBAGameID:                    boxscore.GameNode.GameID,
 					NBATeamID:                    teamData.ID,
@@ -563,6 +566,16 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 		updateGamesMap[updatedGame.ID] = updatedGame
 	}
 
+	teamIDs := make([]int, len(teamIDsMap))
+	for teamID, _ := range teamIDsMap {
+		teamIDs = append(teamIDs, teamID)
+	}
+
+	// make sure team's exist before updating games
+	if err := s.teamService.EnsureTeamsExistForLeague(ctx, "00", teamIDs); err != nil {
+		return nil, fmt.Errorf("failed to ensure teams exist for league when updating games: %w", err)
+	}
+
 	updatedGamesDetailed, err := s.gameStore.UpdateGames(ctx, gameUpdates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update games detailed: %w", err)
@@ -592,7 +605,7 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 
 	_, err = s.playByPlayService.UpdatePlayByPlayForGames(ctx, updateGameIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update play by play fro games: %w", err)
+		return nil, fmt.Errorf("failed to update play by play for games: %w", err)
 	}
 
 	return updatedGames, nil

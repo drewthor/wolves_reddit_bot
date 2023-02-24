@@ -1,1 +1,1 @@
-DROP TABLE season_week;
+drop table if exists season_week;

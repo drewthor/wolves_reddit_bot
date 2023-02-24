@@ -11,7 +11,7 @@ create table referee
     jersey_number  integer
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on referee
     for each row

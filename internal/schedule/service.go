@@ -43,6 +43,7 @@ func NewService(gameService game.Service, seasonService season.Service, r2Client
 }
 
 func (s *service) Start() {
+	log.Info("starting scheduler")
 	s.scheduler.Every(5).Minutes().Do(s.getTodaysGamesAndAddToJobs)
 	// 11am UTC or 3/4 am LA time
 	s.scheduler.Every(1).Day().At("11:00").Do(s.updateSeasonStartYear)

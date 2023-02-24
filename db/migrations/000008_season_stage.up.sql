@@ -8,7 +8,7 @@ create table season_stage
     name       text                                               not null unique
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on season_stage
     for each row

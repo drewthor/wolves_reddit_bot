@@ -1,1 +1,1 @@
-drop table game;
+drop table if exists game;

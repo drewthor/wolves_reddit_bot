@@ -88,14 +88,9 @@ func SetCurrentSeasonStartYear(startYear int) {
 }
 
 func init() {
-	dailyAPIPaths, err := GetDailyAPIPaths()
-	if err != nil {
-		currentTime := time.Now()
-		NBACurrentSeasonStartYear = currentTime.Year()
-		if currentTime.Month() < time.July {
-			NBACurrentSeasonStartYear = currentTime.Year() - 1
-		}
-		return
+	currentTime := time.Now()
+	NBACurrentSeasonStartYear = currentTime.Year()
+	if currentTime.Month() < time.July {
+		NBACurrentSeasonStartYear = currentTime.Year() - 1
 	}
-	NBACurrentSeasonStartYear = dailyAPIPaths.APISeasonInfoNode.SeasonYear
 }

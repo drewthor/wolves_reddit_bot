@@ -1,1 +1,1 @@
-drop table player_position;
+drop table if exists player_position;

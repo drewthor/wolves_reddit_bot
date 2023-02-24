@@ -11,13 +11,13 @@ create table team
     city_alternate text,
     state          text,
     country        text,
-    franchise_id   uuid                                               not null references franchise (id),
+    franchise_id   uuid                                               references franchise (id),
     nba_url_name   text                                               not null,
     nba_short_name text                                               not null,
     nba_team_id    integer                                            not null unique
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on team
     for each row

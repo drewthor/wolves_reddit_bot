@@ -8,7 +8,7 @@ create table division
     name       text                                               not null unique
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on division
     for each row

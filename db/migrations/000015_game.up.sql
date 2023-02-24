@@ -24,7 +24,7 @@ create table game
     nba_game_id                         text                                               not null unique
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on game
     for each row

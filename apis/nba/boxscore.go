@@ -1320,3 +1320,37 @@ func GetBoxscoreDetailed(ctx context.Context, r2Client cloudflare.Client, bucket
 
 	return boxscore, nil
 }
+
+const boxscoreSummaryV2URL = "https://stats.nba.com/stats/boxscoresummaryv2?GameID=%d"
+
+//func (c client) GetBoxscoreSummary(gameID int) (Boxscore, error) {
+//	response, err := c.client.Get(fmt.Sprintf(boxscoreSummaryV2URL, gameID))
+//
+//	if response != nil {
+//		defer response.Body.Close()
+//	}
+//
+//	if err != nil {
+//		return Boxscore{}, err
+//	}
+//
+//	if response.StatusCode != 200 {
+//		return Boxscore{}, fmt.Errorf("failed to get BoxscoreSummary object")
+//	}
+//
+//	var respBody []byte
+//	respBody, err = io.ReadAll(response.Body)
+//
+//	pbp, err := unmarshalNBAHttpResponseToJSON[PlayByPlay](bytes.NewReader(respBody))
+//	if err != nil {
+//		return {}, fmt.Errorf("failed to get PlayByPlay object")
+//	}
+//
+//	for _, outputWriter := range outputWriters {
+//		if err := outputWriter.Put(ctx, respBody); err != nil {
+//			return PlayByPlay{}, fmt.Errorf("failed to write output for play by play for game: %w", err)
+//		}
+//	}
+//
+//	return pbp, nil
+//}

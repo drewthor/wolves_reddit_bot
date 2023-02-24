@@ -6,10 +6,10 @@ create table league
     created_at    timestamp with time zone default now()             not null,
     updated_at    timestamp with time zone,
     name          text                                               not null,
-    nba_league_id integer                                            not null unique
+    nba_league_id integer                                            unique
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on league
     for each row

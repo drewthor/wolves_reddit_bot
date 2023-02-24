@@ -1,6 +1,6 @@
 begin;
 
-create function trigger_set_timestamp() returns trigger
+create or replace function trigger_set_timestamp() returns trigger
     language plpgsql
 as
 $$

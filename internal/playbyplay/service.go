@@ -16,8 +16,8 @@ type Service interface {
 	UpdatePlayByPlayForGames(ctx context.Context, nbaGameIDs []string) ([]api.PlayByPlay, error)
 }
 
-func NewService(nbaClient nba.Client, r2Client cloudflare.Client) Service {
-	return &service{nbaClient: nbaClient, r2Client: r2Client}
+func NewService(nbaClient nba.Client, r2Client cloudflare.Client, playByPlayStore PlayByPlayWriter) Service {
+	return &service{nbaClient: nbaClient, r2Client: r2Client, playByPlayStore: playByPlayStore}
 }
 
 type service struct {

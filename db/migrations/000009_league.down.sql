@@ -1,1 +1,1 @@
-drop table league;
+drop table if exists league;

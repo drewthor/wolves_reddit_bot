@@ -1,1 +1,1 @@
-drop table player;
+drop table if exists player;

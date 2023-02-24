@@ -1,1 +1,1 @@
-drop table "nba"."team_game_stats_period";
+drop table if exists team_game_stats_period;

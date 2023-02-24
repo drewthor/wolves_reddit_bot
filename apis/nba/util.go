@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,6 +86,32 @@ func getPlayerString(playerID string, players map[string]Player) string {
 		lastName = player.LastName
 	}
 	return fmt.Sprintf(playerString, firstInitial, lastName)
+}
+
+func parseSeasonStartEndYears(seasonYear string) (int, int, error) {
+	years := strings.Split(seasonYear, "-")
+	if len(years) != 2 {
+		return -1, -1, fmt.Errorf("invalid season year expected format yyyy-yy and got %s", seasonYear)
+	}
+
+	startYear, err := strconv.Atoi(years[0])
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to get season start year from %s: %w", seasonYear, err)
+	}
+	// if start year and end year have the same last 2, then just prepend the first 2 from start to end, otherwise look at the next year's first 2 and prepend that
+	// to end 2 to handle cases like 1999-99 and 1999-00 for the two mentioned cases
+	endYearLast2, err := strconv.Atoi(years[1])
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to get season end year from %s: %w", seasonYear, err)
+	}
+	endYearFirst2 := (startYear + 1) / 100
+	startYearLast2 := startYear % 100
+	if startYearLast2 == endYearLast2 {
+		endYearFirst2 = (startYear) / 100
+	}
+	endYear := endYearFirst2*100 + endYearLast2
+
+	return startYear, endYear, nil
 }
 
 type seasonStage int

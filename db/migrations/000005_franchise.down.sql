@@ -1,1 +1,1 @@
-drop table franchise;
+drop table if exists franchise;

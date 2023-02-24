@@ -5,6 +5,7 @@ import (
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/internal/team"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 	log "github.com/sirupsen/logrus"
 )
@@ -12,7 +13,7 @@ import (
 func (d DB) GetTeamWithID(ctx context.Context, teamID string) (api.Team, error) {
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
-		FROM nba.team t, 
+		FROM nba.team t 
 		WHERE id = $1`
 
 	// LATERAL (
@@ -61,11 +62,49 @@ func (d DB) GetTeamWithID(ctx context.Context, teamID string) (api.Team, error) 
 	return team, nil
 }
 
-func (d DB) GetTeamsWithIDs(ctx context.Context, ids []string) ([]api.Team, error) {
+func (d DB) GetTeamsWithIDs(ctx context.Context, ids []uuid.UUID) ([]api.Team, error) {
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t
 		WHERE id = ANY($1)`
+
+	rows, err := d.pgxPool.Query(ctx, query, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	teams := []api.Team{}
+
+	for rows.Next() {
+		team := api.Team{}
+		err = rows.Scan(
+			&team.ID,
+			&team.Name,
+			&team.Nickname,
+			&team.City,
+			&team.AlternateCity,
+			&team.State,
+			&team.Country,
+			&team.FranchiseID,
+			&team.NBAURLName,
+			&team.NBAShortName,
+			&team.NBATeamID,
+			&team.CreatedAt,
+			&team.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		teams = append(teams, team)
+	}
+
+	return teams, nil
+}
+
+func (d DB) GetTeamsWithNBAIDs(ctx context.Context, ids []int) ([]api.Team, error) {
+	query := `
+		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
+		FROM nba.team t
+		WHERE nba_team_id = ANY($1)`
 
 	rows, err := d.pgxPool.Query(ctx, query, ids)
 	if err != nil {
@@ -175,10 +214,10 @@ func (d DB) UpdateTeams(ctx context.Context, teams []team.TeamUpdate) ([]api.Tea
 
 	batchResults := tx.SendBatch(ctx, b)
 
-	insertedTeamIDs := []string{}
+	insertedTeamIDs := []uuid.UUID{}
 
 	for _ = range teams {
-		id := ""
+		var id uuid.UUID
 		err := batchResults.QueryRow().Scan(&id)
 		if err != nil {
 			batchResults.Close()

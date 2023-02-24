@@ -1,1 +1,1 @@
-drop table team_season;
+drop table if exists team_season;

@@ -1,1 +1,1 @@
-drop table season;
+drop table if exists season;

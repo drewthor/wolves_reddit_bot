@@ -12,7 +12,7 @@ create table arena
     nba_arena_id integer                                            not null unique
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on arena
     for each row

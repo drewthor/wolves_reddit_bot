@@ -1,1 +1,1 @@
-drop function trigger_set_timestamp;
+drop function if exists trigger_set_timestamp;

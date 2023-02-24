@@ -22,6 +22,7 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/internal/team"
 	"github.com/drewthor/wolves_reddit_bot/internal/team_game_stats"
 	"github.com/drewthor/wolves_reddit_bot/internal/team_season"
+	sentryHook "github.com/drewthor/wolves_reddit_bot/pkg/sentry"
 	"github.com/drewthor/wolves_reddit_bot/util"
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
@@ -36,8 +37,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/jackc/pgx/v4/pgxpool"
-
-	sentryHook "github.com/drewthor/wolves_reddit_bot/pkg/sentry"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -123,11 +122,11 @@ func main() {
 	boxscoreService := boxscore.NewService()
 	gameRefereeService := game_referee.NewService(postgresStore)
 	leagueService := league.NewService(postgresStore)
-	playByPlayService := playbyplay.NewService(nbaClient, r2Client)
+	playByPlayService := playbyplay.NewService(nbaClient, r2Client, postgresStore)
 	refereeService := referee.NewService(postgresStore)
 	seasonService := season.NewService(postgresStore, r2Client)
 	teamSeasonService := team_season.NewService(postgresStore)
-	teamService := team.NewService(postgresStore, teamSeasonService)
+	teamService := team.NewService(postgresStore, teamSeasonService, nbaClient)
 	teamGameStatsService := team_game_stats.NewService(postgresStore)
 	gameService := game.NewService(
 		postgresStore,

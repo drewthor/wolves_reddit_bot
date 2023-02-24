@@ -13,7 +13,7 @@ create table team_season
     unique (team_id, season_id, league_id)
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on team_season
     for each row

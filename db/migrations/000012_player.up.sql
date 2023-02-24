@@ -22,7 +22,7 @@ create table player
     country          text
 );
 
-create trigger set_timestamp
+create or replace trigger set_timestamp
     before update
     on player
     for each row
