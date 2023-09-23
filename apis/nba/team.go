@@ -8,11 +8,9 @@ import (
 	"strconv"
 )
 
-const TeamsURL = "https://data.nba.net/prod/v2/%d/teams.json"
-
-const TeamLogoUrl = "https://cdn.nba.com/logos/nba/%d/primary/L/logo.svg"
-
 const (
+	teamsURL              = "https://data.nba.net/prod/v2/%d/teams.json"
+	teamLogoUrl           = "https://cdn.nba.com/logos/nba/%d/primary/L/logo.svg"
 	teamCommonInfoBaseURL = "https://stats.nba.com/stats/teaminfocommon?"
 )
 
@@ -55,7 +53,7 @@ type TeamCommonInfo struct {
 }
 
 func GetTeamsForSeason(seasonStartYear int) ([]Team, error) {
-	url := fmt.Sprintf(TeamsURL, seasonStartYear)
+	url := fmt.Sprintf(teamsURL, seasonStartYear)
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
@@ -100,7 +98,7 @@ func (c client) GetCommonTeamInfo(ctx context.Context, leagueID string, teamID i
 		"TeamID":   {strconv.Itoa(teamID)},
 	}
 	teamURL := teamCommonInfoBaseURL + urlValues.Encode()
-	response, err := http.Get(teamURL)
+	response, err := c.statsClient.Get(teamURL)
 	if err != nil {
 		return TeamCommonInfo{}, fmt.Errorf("failed to get current teams from nba from url %s", teamURL)
 	}
@@ -128,12 +126,12 @@ func (c client) GetCommonTeamInfo(ctx context.Context, leagueID string, teamID i
 
 			tID, err := parseRowSetValue[int](headersMap, rowSet, "TEAM_ID")
 			if err != nil {
-				return TeamCommonInfo{}, fmt.Errorf("failed to parse response from stats %s endpoint: %w", endPointNameTeamInfoCommon, err)
+				return TeamCommonInfo{}, fmt.Errorf("failed to parse response from stats %s endpoint: %w", endpointNameTeamInfoCommon, err)
 			}
 
 			seasonYear, err := parseRowSetValue[string](headersMap, rowSet, "SEASON_YEAR")
 			if err != nil {
-				return TeamCommonInfo{}, fmt.Errorf("failed to parse response from stats %s endpoint: %w", endPointNameTeamInfoCommon, err)
+				return TeamCommonInfo{}, fmt.Errorf("failed to parse response from stats %s endpoint: %w", endpointNameTeamInfoCommon, err)
 			}
 
 			startYear, endYear, err := parseSeasonStartEndYears(seasonYear)

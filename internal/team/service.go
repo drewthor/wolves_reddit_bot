@@ -8,6 +8,7 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/internal/team_season"
+	"go.opentelemetry.io/otel"
 )
 
 type Service interface {
@@ -123,6 +124,9 @@ func (s service) UpdateTeamsForLeague(ctx context.Context, nbaLeagueID string, t
 }
 
 func (s service) EnsureTeamsExistForLeague(ctx context.Context, nbaLeagueID string, nbaTeamIDs []int) error {
+	ctx, span := otel.Tracer("team").Start(ctx, "team.service.EnsureTeamsExistForLeague")
+	defer span.End()
+
 	existingTeams, err := s.teamStore.GetTeamsWithNBAIDs(ctx, nbaTeamIDs)
 	if err != nil {
 		return fmt.Errorf("failed to ensure teams exist: %w", err)
@@ -149,6 +153,9 @@ func (s service) EnsureTeamsExistForLeague(ctx context.Context, nbaLeagueID stri
 
 // get a mapping from nba team id -> db team id
 func (s service) NBATeamIDMappings(ctx context.Context) (map[string]string, error) {
+	ctx, span := otel.Tracer("team").Start(ctx, "team.service.NBATeamIDMappings")
+	defer span.End()
+
 	nbaTeamIDMappings, err := s.teamStore.NBATeamIDMappings(ctx)
 	if err != nil {
 		return nil, err

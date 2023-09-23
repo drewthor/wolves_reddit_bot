@@ -6,10 +6,75 @@ import (
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/internal/game"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
 )
 
+func (d DB) List(ctx context.Context) ([]api.Game, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.List")
+	defer span.End()
+
+	query := `
+		SELECT id, home_team_id, away_team_id, home_team_points, away_team_points, game_status.name, arena_id, attendance, season.name, season_stage.name, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id, created_at, updated_at
+		FROM nba.game g, 
+		LATERAL (
+		        SELECT name
+				FROM nba.game_status gs
+				WHERE gs.id = g.game_status_id
+		) game_status,
+		LATERAL (
+		        SELECT CONCAT(s.start_year, '-', s.end_year) as name
+				FROM nba.season s
+				WHERE s.id = g.season_id
+		) season,
+		LATERAL (
+		        SELECT name
+				FROM nba.season_stage ss
+				WHERE ss.id = g.season_stage_id
+        ) season_stage`
+
+	rows, err := d.pgxPool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	var games []api.Game
+	for rows.Next() {
+		g := api.Game{}
+		err = rows.Scan(
+			&g.ID,
+			&g.HomeTeamID,
+			&g.AwayTeamID,
+			&g.HomeTeamPoints,
+			&g.AwayTeamPoints,
+			&g.Status,
+			&g.ArenaID,
+			&g.Attendance,
+			&g.Season,
+			&g.SeasonStage,
+			&g.Period,
+			&g.PeriodTimeRemaining,
+			&g.Duration,
+			&g.StartTime,
+			&g.EndTime,
+			&g.NBAGameID,
+			&g.CreatedAt,
+			&g.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		games = append(games, g)
+	}
+
+	return games, nil
+
+}
+
 func (d DB) GetGameWithID(ctx context.Context, id string) (api.Game, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.GetGameWithID")
+	defer span.End()
+
 	query := `
 		SELECT id, home_team_id, away_team_id, home_team_points, away_team_points, game_status.name, arena_id, attendance, season.name, season_stage.name, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id, created_at, updated_at
 		FROM nba.game g, 
@@ -59,6 +124,9 @@ func (d DB) GetGameWithID(ctx context.Context, id string) (api.Game, error) {
 }
 
 func (d DB) GetGamesWithIDs(ctx context.Context, ids []string) ([]api.Game, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.GetGamesWithIDs")
+	defer span.End()
+
 	query := `
 		SELECT id, home_team_id, away_team_id, home_team_points, away_team_points, game_status.name, arena_id, attendance, season.name, season_stage.name, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id, created_at, updated_at
 		FROM nba.game g, 
@@ -84,8 +152,7 @@ func (d DB) GetGamesWithIDs(ctx context.Context, ids []string) ([]api.Game, erro
 		return nil, err
 	}
 
-	games := []api.Game{}
-
+	var games []api.Game
 	for rows.Next() {
 		g := api.Game{}
 		err = rows.Scan(
@@ -118,6 +185,9 @@ func (d DB) GetGamesWithIDs(ctx context.Context, ids []string) ([]api.Game, erro
 }
 
 func (d DB) GetGameWithNBAID(ctx context.Context, nbaID string) (api.Game, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.GetGameWithNBAID")
+	defer span.End()
+
 	query := `
 		SELECT id, home_team_id, away_team_id, home_team_points, away_team_points, game_status.name, arena_id, attendance, season.name, season_stage.name, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id, created_at, updated_at
 		FROM nba.game g, 
@@ -166,20 +236,23 @@ func (d DB) GetGameWithNBAID(ctx context.Context, nbaID string) (api.Game, error
 	return g, nil
 }
 
-func (d DB) UpdateGamesOld(ctx context.Context, gameUpdates []game.GameUpdateOld) ([]api.Game, error) {
+func (d DB) UpdateGamesSummary(ctx context.Context, gameUpdates []game.GameSummaryUpdate) ([]api.Game, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.UpdateGamesSummary")
+	defer span.End()
+
 	if len(gameUpdates) == 0 {
 		return nil, nil
 	}
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start db transaction to update games old with error: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertGame := `
 		INSERT INTO nba.game
-			as g(home_team_id, away_team_id, home_team_points, away_team_points, game_status_id, attendance, season_id, season_stage_id, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id)
-		VALUES ((SELECT id FROM nba.Team WHERE nba_team_id = $1), (SELECT id FROM nba.Team WHERE nba_team_id = $2), $3, $4, (SELECT id FROM nba.game_status WHERE name = $5), $6, (SELECT id FROM nba.season WHERE start_year = $7), (SELECT id FROM nba.season_stage WHERE name = $8), $9, $10, $11, $12, $13, $14)
+			as g(home_team_id, away_team_id, home_team_points, away_team_points, game_status_id, attendance, season_id, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id)
+		VALUES ((SELECT id FROM nba.Team WHERE nba_team_id = $1), (SELECT id FROM nba.Team WHERE nba_team_id = $2), $3, $4, (SELECT id FROM nba.game_status WHERE name = $5), $6, (SELECT id FROM nba.season WHERE start_year = $7), $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (nba_game_id) DO UPDATE
 		SET 
 			home_team_id = coalesce(excluded.home_team_id, g.home_team_id),
@@ -189,7 +262,6 @@ func (d DB) UpdateGamesOld(ctx context.Context, gameUpdates []game.GameUpdateOld
 			game_status_id = coalesce(excluded.game_status_id, g.game_status_id),
 			attendance = coalesce(excluded.attendance, g.attendance),
 			season_id = coalesce(excluded.season_id, g.season_id),
-			season_stage_id = coalesce(excluded.season_stage_id, g.season_stage_id),
 			period = coalesce(excluded.period, g.period),
 			period_time_remaining_tenth_seconds = coalesce(excluded.period_time_remaining_tenth_seconds, g.period_time_remaining_tenth_seconds),
 			duration_seconds = coalesce(excluded.duration_seconds, g.duration_seconds),
@@ -200,6 +272,7 @@ func (d DB) UpdateGamesOld(ctx context.Context, gameUpdates []game.GameUpdateOld
 
 	bp := &pgx.Batch{}
 
+	insertedGameIDs := []string{}
 	for _, gameUpdate := range gameUpdates {
 		bp.Queue(insertGame,
 			gameUpdate.NBAHomeTeamID,
@@ -209,28 +282,22 @@ func (d DB) UpdateGamesOld(ctx context.Context, gameUpdates []game.GameUpdateOld
 			gameUpdate.GameStatusName,
 			gameUpdate.Attendance,
 			gameUpdate.SeasonStartYear,
-			gameUpdate.SeasonStageName,
 			gameUpdate.Period,
 			gameUpdate.PeriodTimeRemainingTenthSeconds,
 			gameUpdate.DurationSeconds,
 			gameUpdate.StartTime,
 			gameUpdate.EndTime,
-			gameUpdate.NBAGameID)
+			gameUpdate.NBAGameID).QueryRow(func(row pgx.Row) error {
+			id := ""
+			if err := row.Scan(&id); err != nil {
+				return err
+			}
+			insertedGameIDs = append(insertedGameIDs, id)
+			return nil
+		})
 	}
 
 	batchResults := tx.SendBatch(ctx, bp)
-
-	insertedGameIDs := []string{}
-
-	for _, _ = range gameUpdates {
-		id := ""
-		err := batchResults.QueryRow().Scan(&id)
-		if err != nil {
-			return nil, err
-		}
-
-		insertedGameIDs = append(insertedGameIDs, id)
-	}
 
 	err = batchResults.Close()
 	if err != nil {
@@ -246,11 +313,14 @@ func (d DB) UpdateGamesOld(ctx context.Context, gameUpdates []game.GameUpdateOld
 }
 
 func (d DB) UpdateGames(ctx context.Context, gameUpdates []game.GameUpdate) ([]api.Game, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.UpdateGames")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start db transaction to update games with error: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertGame := `
 		INSERT INTO nba.game
@@ -263,7 +333,7 @@ func (d DB) UpdateGames(ctx context.Context, gameUpdates []game.GameUpdate) ([]a
 			( SELECT id FROM nba.game_status WHERE name = $5 ) as game_status_id,
 			( SELECT id FROM nba.arena WHERE nba_arena_id = $6 ) as arena_id,
 			$7,
-			( SELECT nba.season.id FROM nba.season JOIN nba.season_week ON nba.season.id = nba.season_week.season_id WHERE nba.season_week.start_date <= $8 AND nba.season_week.end_date > $8) as season_id,
+			( SELECT nba.season.id FROM nba.season JOIN nba.season_week ON nba.season.id = nba.season_week.season_id WHERE nba.season_week.start_date <= $8 AND nba.season_week.end_date > $8 ) as season_id,
 			( SELECT id FROM nba.season_stage WHERE name = 'regular' ) as season_stage_id,
 			$9,
 			$10,
@@ -288,7 +358,7 @@ func (d DB) UpdateGames(ctx context.Context, gameUpdates []game.GameUpdate) ([]a
 			period = coalesce(excluded.period, g.period),
 			period_time_remaining_tenth_seconds = coalesce(excluded.period_time_remaining_tenth_seconds, g.period_time_remaining_tenth_seconds),
 			duration_seconds = coalesce(excluded.duration_seconds, g.duration_seconds),
-			start_time = g.start_time,
+			start_time = excluded.start_time,
 			end_time = coalesce(excluded.end_time, g.end_time),
 			regulation_periods = coalesce(excluded.regulation_periods, g.regulation_periods),
 			nba_game_id = coalesce(excluded.nba_game_id, g.nba_game_id)

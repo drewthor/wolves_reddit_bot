@@ -16,7 +16,7 @@ type Player struct {
 	WeightKilograms *float64   `json:"weight_kilograms"`
 	JerseyNumber    *int       `json:"jersey_number"`
 	Positions       []string   `json:"positions"`
-	CurrentlyInNBA  bool       `json:"currently_in_nba"`
+	Active          bool       `json:"active"`
 	YearsPro        *int       `json:"years_pro"`
 	NBADebutYear    *int       `json:"nba_debut_year"`
 	NBAPlayerID     int        `json:"nba_player_id"`

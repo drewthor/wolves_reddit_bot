@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"sync"
 	"time"
@@ -18,7 +19,7 @@ import (
 	"github.com/drewthor/wolves_reddit_bot/internal/team"
 	"github.com/drewthor/wolves_reddit_bot/internal/team_game_stats"
 	"github.com/drewthor/wolves_reddit_bot/util"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -34,10 +35,10 @@ const (
 
 type Service interface {
 	GetGameWithID(ctx context.Context, id string) (api.Game, error)
-	List(ctx context.Context, gameDate string) (api.Games, error)
+	List(ctx context.Context) ([]api.Game, error)
 	GetGameWithNBAID(ctx context.Context, nbaID string) (api.Game, error)
-	UpdateGame(ctx context.Context, gameID, gameDate string, seasonStartYear int) (api.Game, error)
-	UpdateSeasonGames(ctx context.Context, seasonStartYear int) ([]api.Game, error)
+	UpdateGame(ctx context.Context, logger *slog.Logger, gameID string, seasonStartYear int) (api.Game, error)
+	UpdateSeasonGames(ctx context.Context, logger *slog.Logger, seasonStartYear int) ([]api.Game, error)
 }
 
 func NewService(
@@ -70,7 +71,6 @@ func NewService(
 
 type gameUpdateRequest struct {
 	nbaGameID       string
-	gameDate        string
 	seasonStartYear int
 }
 
@@ -91,29 +91,40 @@ type service struct {
 }
 
 func (s *service) GetGameWithID(ctx context.Context, id string) (api.Game, error) {
+	ctx, span := otel.Tracer("game").Start(ctx, "game.service.GetGameWithID")
+	defer span.End()
+
 	return s.gameStore.GetGameWithID(ctx, id)
 }
 
-func (s *service) List(ctx context.Context, gameDate string) (api.Games, error) {
-	gameScoreboards, err := nba.GetGameScoreboards(ctx, s.r2Client, util.NBAR2Bucket, gameDate)
+func (s *service) List(ctx context.Context) ([]api.Game, error) {
+	ctx, span := otel.Tracer("game").Start(ctx, "game.service.List")
+	defer span.End()
+
+	games, err := s.gameStore.List(ctx)
 	if err != nil {
-		return api.Games{}, err
+		return nil, fmt.Errorf("failed to get games: %w", err)
 	}
-	return api.Games{Games: gameScoreboards.Games}, nil
+	return games, nil
 }
 
 func (s *service) GetGameWithNBAID(ctx context.Context, id string) (api.Game, error) {
+	ctx, span := otel.Tracer("game").Start(ctx, "game.service.GetGameWithNBAID")
+	defer span.End()
+
 	return s.gameStore.GetGameWithNBAID(ctx, id)
 }
 
-func (s *service) UpdateGame(ctx context.Context, gameID, gameDate string, seasonStartYear int) (api.Game, error) {
+func (s *service) UpdateGame(ctx context.Context, logger *slog.Logger, gameID string, seasonStartYear int) (api.Game, error) {
+	ctx, span := otel.Tracer("game").Start(ctx, "game.service.UpdateGame")
+	defer span.End()
+
 	g := gameUpdateRequest{
 		nbaGameID:       gameID,
-		gameDate:        gameDate,
 		seasonStartYear: seasonStartYear,
 	}
 
-	games, err := s.updateGames(ctx, []gameUpdateRequest{g})
+	games, err := s.updateGames(ctx, logger, []gameUpdateRequest{g})
 	if err != nil {
 		return api.Game{}, fmt.Errorf("failed to update game: %w", err)
 	}
@@ -124,10 +135,13 @@ func (s *service) UpdateGame(ctx context.Context, gameID, gameDate string, seaso
 	return games[0], nil
 }
 
-func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpdateRequest) ([]api.Game, error) {
+func (s *service) updateGames(ctx context.Context, logger *slog.Logger, gameUpdateRequests []gameUpdateRequest) ([]api.Game, error) {
+	ctx, span := otel.Tracer("game").Start(ctx, "game.service.updateGames")
+	defer span.End()
+
 	type boxscoreComposite struct {
 		Detailed *nba.Boxscore
-		Old      *nba.BoxscoreOld
+		Summary  *nba.BoxscoreSummary
 	}
 
 	boxscoreResults := make(chan boxscoreComposite, len(gameUpdateRequests))
@@ -148,16 +162,18 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 
 		boxscore, err := nba.GetBoxscoreDetailed(ctx, s.r2Client, util.NBAR2Bucket, gameUpdateRequest.nbaGameID, gameUpdateRequest.seasonStartYear)
 		if err != nil {
-			log.WithError(err).WithField("gameID", gameUpdateRequest.nbaGameID).Error("could not retrieve detailed boxscore for game")
+			logger.Error("could not retrieve detailed boxscore for game", slog.String("game_id", gameUpdateRequest.nbaGameID), slog.Any("error", err))
 		} else {
 			composite.Detailed = &boxscore
 		}
 
-		boxscoreOld, err := nba.GetOldBoxscore(ctx, s.r2Client, util.NBAR2Bucket, gameUpdateRequest.nbaGameID, gameUpdateRequest.gameDate, gameUpdateRequest.seasonStartYear)
+		//filepath := fmt.Sprintf(os.Getenv("STORAGE_PATH")+"/boxscoresummary/%d/%s.json", gameUpdateRequest.seasonStartYear, gameUpdateRequest.nbaGameID)
+		objectKey := fmt.Sprintf("boxscoresummary/%d/%s.json", gameUpdateRequest.seasonStartYear, gameUpdateRequest.nbaGameID)
+		boxscoreSummary, err := s.nbaClient.GetBoxscoreSummary(ctx, gameUpdateRequest.nbaGameID, util.WithR2OutputWriter(logger, s.r2Client, util.NBAR2Bucket, objectKey))
 		if err != nil {
-			log.Printf("could not retrieve old boxscore for gameID: %s\n", gameUpdateRequest.nbaGameID)
+			logger.Error("could not retrieve boxscore summary", slog.String("game_id", gameUpdateRequest.nbaGameID), slog.Any("error", err))
 		} else {
-			composite.Old = &boxscoreOld
+			composite.Summary = &boxscoreSummary
 		}
 
 		boxscoreResults <- composite
@@ -175,7 +191,7 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 
 	var arenaUpdates []arena.ArenaUpdate
 	var refereeUpdates []referee.RefereeUpdate
-	var gameUpdatesOld []GameUpdateOld
+	var gameSummaryUpdates []GameSummaryUpdate
 	var gameUpdates []GameUpdate
 	var teamGameStatsTotalUpdates []team_game_stats.TeamGameStatsTotalUpdate
 	var gameRefereeUpdates []game_referee.GameRefereeUpdate
@@ -188,179 +204,82 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 	leagueNameStartYearUpdatesMap := map[string]int{}
 
 	for boxscoreResult := range boxscoreResults {
-		boxscoreOld := boxscoreResult.Old
-		if boxscoreOld != nil {
-			leagueStartYear, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.SeasonYear)
-			if err != nil {
-				log.WithField("game_id", boxscoreOld.BasicGameDataNode.GameID).
-					WithError(err).Errorf("failed to convert nba season start year %s to int", boxscoreOld.BasicGameDataNode.SeasonYear)
-			}
+		boxscoreSummary := boxscoreResult.Summary
+		if boxscoreSummary != nil {
+			homeTeamID := boxscoreSummary.HomeTeam.TeamID
 
-			leagueNameStartYearUpdatesMap[boxscoreOld.BasicGameDataNode.LeagueName] = leagueStartYear
+			awayTeamID := boxscoreSummary.AwayTeam.TeamID
 
-			homeTeamID, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.HomeTeamInfo.TeamID)
-			if err != nil {
-				log.Printf("failed to convert nba home team id: %s to int\n", boxscoreOld.BasicGameDataNode.HomeTeamInfo.TeamID)
-				continue
-			}
+			//periodTimeRemainingFloat, err := strconv.ParseFloat(boxscoreSummary.BasicGameDataNode.Clock, 64)
+			//if err != nil {
+			//	not really an error, the nba api returns an empty string if the clock has expired
+			//periodTimeRemainingFloat = 0
+			//}
+			//periodTimeRemainingTenthSeconds := int(periodTimeRemainingFloat * 10)
 
-			awayTeamID, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.AwayTeamInfo.TeamID)
-			if err != nil {
-				log.Printf("failed to convert nba away team id: %s to int\n", boxscoreOld.BasicGameDataNode.AwayTeamInfo.TeamID)
-				continue
-			}
+			attendance := boxscoreSummary.Attendance
+			//
+			//durationSeconds := 0
+			//durationSecondsValid := false
 
-			periodTimeRemainingFloat, err := strconv.ParseFloat(boxscoreOld.BasicGameDataNode.Clock, 64)
-			if err != nil {
-				// not really an error, the nba api returns an empty string if the clock has expired
-				periodTimeRemainingFloat = 0
-			}
-			periodTimeRemainingTenthSeconds := int(periodTimeRemainingFloat * 10)
-
-			attendance, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.Attendance)
-			if err != nil {
-				// nba api treats "" as 0
-				attendance = 0
-			}
-
-			durationSeconds := 0
-			durationSecondsValid := false
-
-			if boxscoreOld.BasicGameDataNode.GameDurationNode != nil {
-				if hours, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.GameDurationNode.Hours); err == nil {
-					if minutes, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.GameDurationNode.Minutes); err == nil {
-						durationSeconds = (hours * 60 * 60) + (minutes * 60)
-						durationSecondsValid = true
-					}
-				}
-			}
+			//if boxscoreSummary.BasicGameDataNode.GameDurationNode != nil {
+			//	if hours, err := strconv.Atoi(boxscoreSummary.BasicGameDataNode.GameDurationNode.Hours); err == nil {
+			//		if minutes, err := strconv.Atoi(boxscoreSummary.BasicGameDataNode.GameDurationNode.Minutes); err == nil {
+			//			durationSeconds = (hours * 60 * 60) + (minutes * 60)
+			//			durationSecondsValid = true
+			//		}
+			//	}
+			//}
 
 			// nba api treats "" as 0
-			homeTeamPoints, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.HomeTeamInfo.Points)
-			homeTeamPointsValid := true
-			if err != nil {
-				homeTeamPointsValid = false
-			}
+			//homeTeamPoints, err := strconv.Atoi(boxscoreSummary.GameInfo)
+			//homeTeamPointsValid := true
+			//if err != nil {
+			//	homeTeamPointsValid = false
+			//}
 
 			// nba api treats "" as 0
-			awayTeamPoints, err := strconv.Atoi(boxscoreOld.BasicGameDataNode.AwayTeamInfo.Points)
-			awayTeamPointsValid := true
-			if err != nil {
-				awayTeamPointsValid = false
-			}
+			//awayTeamPoints, err := strconv.Atoi(boxscoreSummary.BasicGameDataNode.AwayTeamInfo.Points)
+			//awayTeamPointsValid := true
+			//if err != nil {
+			//	awayTeamPointsValid = false
+			//}
 
 			endTime := sql.NullTime{
 				Valid: false,
 			}
-			if boxscoreOld.BasicGameDataNode.GameEndTimeUTC != nil {
-				endTime.Time = *boxscoreOld.BasicGameDataNode.GameEndTimeUTC
-				endTime.Valid = true
-			}
+			//if boxscoreSummary.EBasicGameDataNode.GameEndTimeUTC != nil {
+			//	endTime.Time = *boxscoreSummary.BasicGameDataNode.GameEndTimeUTC
+			//	endTime.Valid = true
+			//}
 
-			gameUpdate := GameUpdateOld{
-				NBAHomeTeamID: homeTeamID,
-				NBAAwayTeamID: awayTeamID,
-				HomeTeamPoints: sql.NullInt64{
-					Int64: int64(homeTeamPoints),
-					Valid: homeTeamPointsValid,
-				},
-				AwayTeamPoints: sql.NullInt64{
-					Int64: int64(awayTeamPoints),
-					Valid: awayTeamPointsValid,
-				},
-				GameStatusName:                  gameStatusNameMappings[boxscoreOld.BasicGameDataNode.StatusNum],
-				Attendance:                      attendance,
-				SeasonStartYear:                 boxscoreOld.BasicGameDataNode.SeasonYear,
-				SeasonStageName:                 seasonStageNameMappings[int(boxscoreOld.BasicGameDataNode.SeasonStage)],
-				Period:                          boxscoreOld.BasicGameDataNode.PeriodNode.CurrentPeriod,
-				PeriodTimeRemainingTenthSeconds: periodTimeRemainingTenthSeconds,
-				DurationSeconds: sql.NullInt64{
-					Int64: int64(durationSeconds),
-					Valid: durationSecondsValid,
-				},
-				StartTime: boxscoreOld.BasicGameDataNode.GameStartTimeUTC.Time,
+			gameUpdate := GameSummaryUpdate{
+				NBAHomeTeamID:  homeTeamID,
+				NBAAwayTeamID:  awayTeamID,
+				HomeTeamPoints: sql.NullInt64{},
+				//Int64: int64(homeTeamPoints),
+				//Valid: homeTeamPointsValid,
+				//},
+				AwayTeamPoints: sql.NullInt64{},
+				//Int64: int64(awayTeamPoints),
+				//Valid: awayTeamPointsValid,
+				//},
+				GameStatusName:  gameStatusNameMappings[boxscoreSummary.GameStatusID],
+				Attendance:      attendance,
+				SeasonStartYear: strconv.Itoa(boxscoreSummary.SeasonStartYear),
+				//SeasonStageName:                 seasonStageNameMappings[int(boxscoreSummary.S)],
+				Period: boxscoreSummary.Period,
+				//PeriodTimeRemainingTenthSeconds: periodTimeRemainingTenthSeconds,
+				//DurationSeconds: sql.NullInt64{
+				//	Int64: int64(durationSeconds),
+				//	Valid: durationSecondsValid,
+				//},
+				//StartTime: boxscoreSummary.BasicGameDataNode.GameStartTimeUTC.Time,
 				EndTime:   endTime,
-				NBAGameID: boxscoreOld.BasicGameDataNode.GameID,
+				NBAGameID: boxscoreSummary.GameID,
 			}
 
-			gameUpdatesOld = append(gameUpdatesOld, gameUpdate)
-
-			if boxscoreOld.StatsNode != nil {
-				for i, teamData := range []nba.TeamStats{boxscoreOld.StatsNode.HomeTeamNode, boxscoreOld.StatsNode.AwayTeamNode} {
-					teamID := homeTeamID
-					if i == 1 {
-						teamID = awayTeamID
-					}
-
-					points, err := strconv.Atoi(teamData.TeamStatsTotals.Points)
-					if err != nil {
-						points = 0
-					}
-
-					teamGameStatsTotalUpdate := team_game_stats.TeamGameStatsTotalUpdate{
-						NBAGameID:                    boxscoreOld.BasicGameDataNode.GameID,
-						NBATeamID:                    teamID,
-						GameTimePlayedSeconds:        teamData.TeamStatsTotals.Minutes.DurationTenthSeconds / 10 / 5,
-						TotalPlayerTimePlayedSeconds: teamData.TeamStatsTotals.Minutes.DurationTenthSeconds / 10,
-						Points:                       points,
-						//PointsAgainst:                teamData.Statistics.PointsAgainst,
-						//Assists:                      teamData.Statistics.Assists,
-						//PersonalTurnovers:            teamData.Statistics.Turnovers,
-						//TeamTurnovers:                teamData.Statistics.TurnoversTeam,
-						//TotalTurnovers:               teamData.Statistics.TurnoversTotal,
-						//Steals:                       teamData.Statistics.Steals,
-						//ThreePointersAttempted:       teamData.Statistics.ThreePointersAttempted,
-						//ThreePointersMade:            teamData.Statistics.ThreePointersMade,
-						//FieldGoalsAttempted:          teamData.Statistics.FieldGoalsAttempted,
-						//FieldGoalsMade:               teamData.Statistics.FieldGoalsMade,
-						//EffectiveAdjustedFieldGoals:  teamData.Statistics.FieldGoalsEffectiveAdjusted,
-						//FreeThrowsAttempted:          teamData.Statistics.FreeThrowsAttempted,
-						//FreeThrowsMade:               teamData.Statistics.FreeThrowsMade,
-						//Blocks:                       teamData.Statistics.Blocks,
-						//TimesBlocked:                 teamData.Statistics.BlocksReceived,
-						//PersonalOffensiveRebounds:    teamData.Statistics.ReboundsOffensive,
-						//PersonalDefensiveRebounds:    teamData.Statistics.ReboundsDefensive,
-						//TotalPersonalRebounds:        teamData.Statistics.ReboundsPersonal,
-						//TeamRebounds:                 teamData.Statistics.ReboundsTeam,
-						//TeamOffensiveRebounds:        teamData.Statistics.ReboundsTeamOffensive,
-						//TeamDefensiveRebounds:        teamData.Statistics.ReboundsTeamDefensive,
-						//TotalOffensiveRebounds:       teamData.Statistics.ReboundsTeamOffensive + teamData.Statistics.ReboundsOffensive,
-						//TotalDefensiveRebounds:       teamData.Statistics.ReboundsTeamDefensive + teamData.Statistics.ReboundsDefensive,
-						//TotalRebounds:                teamData.Statistics.ReboundsTotal,
-						//PersonalFouls:                teamData.Statistics.FoulsPersonal,
-						//OffensiveFouls:               teamData.Statistics.FoulsOffensive,
-						//FoulsDrawn:                   teamData.Statistics.FoulsDrawn,
-						//TeamFouls:                    teamData.Statistics.FoulsTeam,
-						//PersonalTechnicalFouls:       teamData.Statistics.FoulsTechnical,
-						//TeamTechnicalFouls:           teamData.Statistics.FoulsTeamTechnical,
-						//FullTimeoutsRemaining:        0,
-						//ShortTimeoutsRemaining:       0,
-						//TotalTimeoutsRemaining:       teamData.TimeoutsRemaining, // starting in 2017 full and short timeouts where combined into one group of timeouts https://www.nba.com/news/nba-board-governors-timeout-rules-game-flow-trade-deadline
-						//FastBreakPoints:              teamData.Statistics.PointsFastBreak,
-						//FastBreakPointsAttempted:     teamData.Statistics.FastBreakPointsAttempted,
-						//FastBreakPointsMade:          teamData.Statistics.FastBreakPointsMade,
-						//PointsInPaint:                teamData.Statistics.PointsInThePaint,
-						//PointsInPaintAttempted:       teamData.Statistics.PointsInThePaintAttempted,
-						//PointsInPaintMade:            teamData.Statistics.PointsInThePaintMade,
-						//SecondChancePoints:           teamData.Statistics.PointsSecondChance,
-						//SecondChancePointsAttempted:  teamData.Statistics.PointsSecondChanceAttempted,
-						//SecondChancePointsMade:       teamData.Statistics.PointsSecondChanceMade,
-						//PointsOffTurnovers:           teamData.Statistics.PointsOffTurnovers,
-						//BiggestLead:                  teamData.Statistics.BiggestLead,
-						//BiggestLeadScore:             teamData.Statistics.BiggestLeadScore,
-						//BiggestScoringRun:            teamData.Statistics.BiggestScoringRun,
-						//BiggestScoringRunScore:       teamData.Statistics.BiggestScoringRunScore,
-						//TimeLeadingTenthSeconds:      teamData.Statistics.TimeLeading.DurationTenthSeconds,
-						//LeadChanges:                  teamData.Statistics.LeadChanges,
-						//TimesTied:                    teamData.Statistics.TimesTied,
-						//TrueShootingAttempts:         teamData.Statistics.TrueShootingAttempts,
-						//TrueShootingPercentage:       teamData.Statistics.TrueShootingPercentage,
-						//BenchPoints:                  teamData.Statistics.BenchPoints,
-					}
-
-					teamGameStatsTotalUpdates = append(teamGameStatsTotalUpdates, teamGameStatsTotalUpdate)
-				}
-			}
+			gameSummaryUpdates = append(gameSummaryUpdates, gameUpdate)
 		}
 
 		boxscore := boxscoreResult.Detailed
@@ -396,7 +315,6 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 			for _, boxscoreOfficial := range boxscore.GameNode.Officials {
 				jerseyNumber, err := strconv.Atoi(boxscoreOfficial.JerseyNumber)
 				if err != nil {
-					log.Printf("could not convert nba official id: %d jersey: %s\n", boxscoreOfficial.PersonID, boxscoreOfficial.JerseyNumber)
 				}
 
 				refereeUpdate := referee.RefereeUpdate{
@@ -418,7 +336,6 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 
 			sellout, err := strconv.ParseBool(boxscore.GameNode.Sellout)
 			if err != nil {
-				log.Printf("could not parse sellout: %s to bool\n", boxscore.GameNode.Sellout)
 				sellout = false
 			}
 
@@ -459,6 +376,8 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 			gameUpdates = append(gameUpdates, gameUpdate)
 
 			for _, teamData := range []nba.BoxscoreTeam{boxscore.GameNode.HomeTeam, boxscore.GameNode.AwayTeam} {
+				if teamData.ID == 0 {
+				}
 				teamIDsMap[teamData.ID] = true
 
 				teamGameStatsTotalUpdate := team_game_stats.TeamGameStatsTotalUpdate{
@@ -555,18 +474,18 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 		return nil, fmt.Errorf("failed to update arenas: %w", err)
 	}
 
-	updatedGamesOld, err := s.gameStore.UpdateGamesOld(ctx, gameUpdatesOld)
+	updatedGameSummaries, err := s.gameStore.UpdateGamesSummary(ctx, gameSummaryUpdates)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update games old: %w", err)
+		return nil, fmt.Errorf("failed to update games summary: %w", err)
 	}
 
 	updateGamesMap := map[string]api.Game{}
 
-	for _, updatedGame := range updatedGamesOld {
+	for _, updatedGame := range updatedGameSummaries {
 		updateGamesMap[updatedGame.ID] = updatedGame
 	}
 
-	teamIDs := make([]int, len(teamIDsMap))
+	var teamIDs []int
 	for teamID, _ := range teamIDsMap {
 		teamIDs = append(teamIDs, teamID)
 	}
@@ -586,11 +505,13 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 	}
 
 	updatedGames := []api.Game{}
-	var updateGameIDs []string
+	var startedGameIDs []string
 
 	for _, updatedGame := range updateGamesMap {
 		updatedGames = append(updatedGames, updatedGame)
-		updateGameIDs = append(updateGameIDs, updatedGame.NBAGameID)
+		if updatedGame.Duration != nil && *updatedGame.Duration > 0 {
+			startedGameIDs = append(startedGameIDs, updatedGame.NBAGameID)
+		}
 	}
 
 	_, err = s.teamGameStatsService.UpdateTeamGameStatsTotals(ctx, teamGameStatsTotalUpdates)
@@ -603,7 +524,7 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 		return nil, fmt.Errorf("failed to update game referees: %w", err)
 	}
 
-	_, err = s.playByPlayService.UpdatePlayByPlayForGames(ctx, updateGameIDs)
+	_, err = s.playByPlayService.UpdatePlayByPlayForGames(ctx, logger, startedGameIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update play by play for games: %w", err)
 	}
@@ -611,7 +532,10 @@ func (s *service) updateGames(ctx context.Context, gameUpdateRequests []gameUpda
 	return updatedGames, nil
 }
 
-func (s *service) UpdateSeasonGames(ctx context.Context, seasonStartYear int) ([]api.Game, error) {
+func (s *service) UpdateSeasonGames(ctx context.Context, logger *slog.Logger, seasonStartYear int) ([]api.Game, error) {
+	ctx, span := otel.Tracer("game").Start(ctx, "game.service.UpdateSeasonGames")
+	defer span.End()
+
 	nbaGames, err := s.getSeasonLeagueScheduleFromNBAAPI(ctx, seasonStartYear)
 	if err != nil {
 		return nil, err
@@ -622,18 +546,25 @@ func (s *service) UpdateSeasonGames(ctx context.Context, seasonStartYear int) ([
 	for _, nbaGame := range nbaGames {
 		gameUpdateRequests = append(gameUpdateRequests, gameUpdateRequest{
 			nbaGameID:       nbaGame.GameID,
-			gameDate:        nbaGame.StartDateEastern,
 			seasonStartYear: seasonStartYear,
 		})
 	}
 
-	return s.updateGames(ctx, gameUpdateRequests)
+	return s.updateGames(ctx, logger, gameUpdateRequests)
 }
 
 func (s *service) getSeasonLeagueScheduleFromNBAAPI(ctx context.Context, seasonStartYear int) ([]nba.Game, error) {
-	nbaGames, err := nba.GetSeasonLeagueSchedule(seasonStartYear)
+	ctx, span := otel.Tracer("game").Start(ctx, "game.service.getSeasonLeagueScheduleFromNBAAPI")
+	defer span.End()
+
+	schedule, err := nba.GetLeagueSchedule(ctx, s.r2Client, util.NBAR2Bucket, seasonStartYear)
 	if err != nil {
 		return nil, err
+	}
+
+	var nbaGames []nba.Game
+	for _, gameDate := range schedule.LeagueSchedule.GameDates {
+		nbaGames = append(nbaGames, gameDate.Games...)
 	}
 
 	return nbaGames, nil

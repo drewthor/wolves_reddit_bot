@@ -1,11 +1,12 @@
 package team
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/util"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -17,12 +18,13 @@ type Handler interface {
 	UpdateTeams(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandler(teamService Service) Handler {
-	return &handler{TeamService: teamService}
+func NewHandler(logger *slog.Logger, teamService Service) Handler {
+	return &handler{logger: logger, teamService: teamService}
 }
 
 type handler struct {
-	TeamService Service
+	logger      *slog.Logger
+	teamService Service
 }
 
 func (h *handler) Routes() chi.Router {
@@ -38,10 +40,13 @@ func (h *handler) Routes() chi.Router {
 }
 
 func (h *handler) List(w http.ResponseWriter, r *http.Request) {
-	teams, err := h.TeamService.ListTeams(r.Context())
+	ctx, span := otel.Tracer("team").Start(r.Context(), "team.handler.List")
+	defer span.End()
+
+	teams, err := h.teamService.ListTeams(ctx)
 
 	if err != nil {
-		log.Error(err)
+		h.logger.Error("failed to list teams", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -50,12 +55,16 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
-	teamID := chi.URLParam(r, "teamID")
+	ctx, span := otel.Tracer("team").Start(r.Context(), "team.handler.Get")
+	defer span.End()
 
-	team, err := h.TeamService.Get(r.Context(), teamID)
+	teamID := chi.URLParam(r, "teamID")
+	logger := h.logger.With(slog.String("team_id", teamID))
+
+	team, err := h.teamService.Get(ctx, teamID)
 
 	if err != nil {
-		log.Error(err)
+		logger.Error("failed to get team", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -64,16 +73,21 @@ func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) UpdateTeams(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("team").Start(r.Context(), "team.handler.UpdateTeams")
+	defer span.End()
+
 	seasonStartYear, err := strconv.Atoi(r.URL.Query().Get("season-start-year"))
 	if err != nil {
 		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
 		return
 	}
 
-	teams, err := h.TeamService.UpdateTeams(r.Context(), seasonStartYear)
+	logger := h.logger.With(slog.Int("season_start_year", seasonStartYear))
+
+	teams, err := h.teamService.UpdateTeams(ctx, seasonStartYear)
 
 	if err != nil {
-		log.Error(err)
+		logger.Error("failed to update teams", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

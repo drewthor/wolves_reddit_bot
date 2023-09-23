@@ -1,6 +1,8 @@
 package postgres
 
-import "github.com/jackc/pgx/v4/pgxpool"
+import "github.com/jackc/pgx/v5/pgxpool"
+
+//pgxpool"
 
 type DB struct {
 	pgxPool *pgxpool.Pool

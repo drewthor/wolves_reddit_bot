@@ -1,6 +1,10 @@
 package league
 
-import "context"
+import (
+	"context"
+
+	"go.opentelemetry.io/otel"
+)
 
 type Service interface {
 	UpdateLeagues(ctx context.Context, leagueUpdates []LeagueUpdate) ([]League, error)
@@ -15,5 +19,8 @@ type service struct {
 }
 
 func (s *service) UpdateLeagues(ctx context.Context, leagueUpdates []LeagueUpdate) ([]League, error) {
+	ctx, span := otel.Tracer("league").Start(ctx, "league.service.UpdateLeagues")
+	defer span.End()
+
 	return s.leagueStore.UpdateLeagues(ctx, leagueUpdates)
 }

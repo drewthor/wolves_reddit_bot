@@ -1,9 +1,12 @@
-# fly.toml file generated for delicate-bush-8558 on 2021-06-16T19:20:02-05:00
+# fly.toml app configuration file generated for delicate-bush-8558 on 2023-08-15T22:34:50-05:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
 app = "delicate-bush-8558"
-
+primary_region = "ord"
 kill_signal = "SIGINT"
-kill_timeout = 5
+kill_timeout = "5s"
 
 [build]
   builder = "paketobuildpacks/builder:base"
@@ -12,39 +15,32 @@ kill_timeout = 5
 #[deploy]
 #  release_command = "go run ./cmd/pgmigrate" does not work currently as it's using a dsn connection string in prod and migrate supports only the url
 
-[env]
-  PORT = "8080"
-  STORAGE_PATH = "/data"
-
 [experimental]
-  allowed_public_ports = []
   auto_rollback = true
 
-[[services]]
-  http_checks = []
-  internal_port = 3333
-  protocol = "tcp"
-  script_checks = []
+[deploy]
+  strategy = "bluegreen"
 
+[env]
+  PORT = "8080"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3333
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
   [services.concurrency]
+    type = "connections"
     hard_limit = 25
     soft_limit = 20
-    type = "connections"
-
-  [[services.ports]]
-    handlers = ["http"]
-    port = 80
-
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
 
   [[services.tcp_checks]]
-    grace_period = "1s"
     interval = "15s"
-    restart_limit = 6
     timeout = "2s"
-
-[mounts]
-  source = "data"
-  destination = "/data"
+    grace_period = "5s"

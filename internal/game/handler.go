@@ -1,12 +1,13 @@
 package game
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/internal/boxscore"
 	"github.com/drewthor/wolves_reddit_bot/util"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -17,12 +18,13 @@ type Handler interface {
 	UpdateGames(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandler(gameService Service) Handler {
-	return &handler{GameService: gameService}
+func NewHandler(logger *slog.Logger, gameService Service) Handler {
+	return &handler{logger: logger, gameService: gameService}
 }
 
 type handler struct {
-	GameService Service
+	logger      *slog.Logger
+	gameService Service
 }
 
 func (h *handler) Routes() chi.Router {
@@ -31,7 +33,7 @@ func (h *handler) Routes() chi.Router {
 	r.Get("/", h.List)
 
 	r.Route("/{gameID}", func(r chi.Router) {
-		r.Mount("/boxscore", boxscore.NewHandler(boxscore.NewService()).Routes())
+		r.Mount("/boxscore", boxscore.NewHandler(h.logger, boxscore.NewService()).Routes())
 	})
 
 	r.Post("/update", h.UpdateGames)
@@ -41,16 +43,20 @@ func (h *handler) Routes() chi.Router {
 }
 
 func (h *handler) List(w http.ResponseWriter, r *http.Request) {
-	gameDate := r.URL.Query().Get("game-date")
+	ctx, span := otel.Tracer("game").Start(r.Context(), "game.handler.List")
+	defer span.End()
 
-	if gameDate == "" {
-		util.WriteJSON(http.StatusBadRequest, "invalid request: missing game_date", w)
-		return
-	}
+	//gameDate := r.URL.Query().Get("game-date")
+	//if gameDate == "" {
+	//	util.WriteJSON(http.StatusBadRequest, "invalid request: missing game_date", w)
+	//	return
+	//}
 
-	games, err := h.GameService.List(r.Context(), gameDate)
+	//logger := h.logger.With(slog.String("game_date", gameDate))
+
+	games, err := h.gameService.List(ctx)
 	if err != nil {
-		log.WithError(err).Errorf("failed to get games for date: %s", gameDate)
+		h.logger.Error("failed to get games", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -59,15 +65,20 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) UpdateGames(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("game").Start(r.Context(), "game.handler.UpdateGames")
+	defer span.End()
+
 	seasonStartYear, err := strconv.Atoi(r.URL.Query().Get("season-start-year"))
 	if err != nil {
 		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
 		return
 	}
 
-	games, err := h.GameService.UpdateSeasonGames(r.Context(), seasonStartYear)
+	logger := h.logger.With(slog.Int("season_start_year", seasonStartYear))
+
+	games, err := h.gameService.UpdateSeasonGames(ctx, logger, seasonStartYear)
 	if err != nil {
-		log.WithError(err).Errorf("could not update games for season-start-year: %d", seasonStartYear)
+		logger.Error("could not update games", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -76,29 +87,27 @@ func (h *handler) UpdateGames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
-	gameID := r.URL.Query().Get("game-id")
-	gameDate := r.URL.Query().Get("game-date")
-	seasonStartYearStr := r.URL.Query().Get("season-start-year")
+	ctx, span := otel.Tracer("game").Start(r.Context(), "game.handler.UpdateGame")
+	defer span.End()
 
+	gameID := r.URL.Query().Get("game-id")
 	if gameID == "" {
 		util.WriteJSON(http.StatusBadRequest, "invalid required game-id", w)
 		return
 	}
 
-	if gameDate == "" {
-		util.WriteJSON(http.StatusBadRequest, "invalid required game-date", w)
-		return
-	}
-
+	seasonStartYearStr := r.URL.Query().Get("season-start-year")
 	seasonStartYear, err := strconv.Atoi(seasonStartYearStr)
 	if err != nil {
 		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
 		return
 	}
 
-	games, err := h.GameService.UpdateGame(r.Context(), gameID, gameDate, seasonStartYear)
+	logger := h.logger.With(slog.Int("season_start_year", seasonStartYear), slog.String("game_id", gameID))
+
+	games, err := h.gameService.UpdateGame(ctx, logger, gameID, seasonStartYear)
 	if err != nil {
-		log.WithError(err).Errorf("could not update game")
+		logger.Error("could not update game", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

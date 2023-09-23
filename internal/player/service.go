@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
@@ -27,6 +26,9 @@ type service struct {
 }
 
 func (s *service) Get(ctx context.Context, playerID string) (api.Player, error) {
+	ctx, span := otel.Tracer("player").Start(ctx, "player.service.Get")
+	defer span.End()
+
 	player, err := s.PlayerStore.GetPlayerWithID(ctx, playerID)
 	if err != nil {
 		return player, err
@@ -46,7 +48,10 @@ func (s *service) ListPlayers(ctx context.Context) ([]api.Player, error) {
 }
 
 func (s *service) UpdatePlayers(ctx context.Context, seasonStartYear int) ([]api.Player, error) {
-	players, err := s.getSeasonPlayers(seasonStartYear)
+	ctx, span := otel.Tracer("player").Start(ctx, "player.service.UpdatePlayers")
+	defer span.End()
+
+	players, err := s.getSeasonPlayers(ctx, seasonStartYear)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +63,10 @@ func (s *service) UpdatePlayers(ctx context.Context, seasonStartYear int) ([]api
 	return updatedPlayers, nil
 }
 
-func (s *service) getSeasonPlayers(seasonStartYear int) ([]api.Player, error) {
+func (s *service) getSeasonPlayers(ctx context.Context, seasonStartYear int) ([]api.Player, error) {
+	ctx, span := otel.Tracer("player").Start(ctx, "player.service.getSeasonPlayers")
+	defer span.End()
+
 	nbaPlayers, err := nba.GetPlayers(seasonStartYear)
 
 	if err != nil {
@@ -126,7 +134,6 @@ func (s *service) getSeasonPlayers(seasonStartYear int) ([]api.Player, error) {
 
 		nbaPlayerID, err := strconv.Atoi(nbaPlayer.ID)
 		if err != nil {
-			log.Println("could not convert player id: ", nbaPlayer.ID, " to int for player with first name: ", nbaPlayer.FirstName, " last name: ", nbaPlayer.LastName, " for season: ", seasonStartYear)
 		}
 
 		player := api.Player{
@@ -140,7 +147,7 @@ func (s *service) getSeasonPlayers(seasonStartYear int) ([]api.Player, error) {
 			WeightKilograms: weightKilograms,
 			JerseyNumber:    jerseyNumber,
 			Positions:       position,
-			CurrentlyInNBA:  nbaPlayer.CurrentlyInNBA,
+			Active:          nbaPlayer.CurrentlyInNBA,
 			YearsPro:        yearsPro,
 			NBADebutYear:    nbaDebutYear,
 			NBAPlayerID:     nbaPlayerID,

@@ -2,15 +2,19 @@ package postgres
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/internal/team"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v4"
-	log "github.com/sirupsen/logrus"
+	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
 )
 
 func (d DB) GetTeamWithID(ctx context.Context, teamID string) (api.Team, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.GetTeamWithID")
+	defer span.End()
+
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t 
@@ -63,6 +67,9 @@ func (d DB) GetTeamWithID(ctx context.Context, teamID string) (api.Team, error) 
 }
 
 func (d DB) GetTeamsWithIDs(ctx context.Context, ids []uuid.UUID) ([]api.Team, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.GetTeamsWithIDs")
+	defer span.End()
+
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t
@@ -101,6 +108,9 @@ func (d DB) GetTeamsWithIDs(ctx context.Context, ids []uuid.UUID) ([]api.Team, e
 }
 
 func (d DB) GetTeamsWithNBAIDs(ctx context.Context, ids []int) ([]api.Team, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.GetTeamsWithNBAIDs")
+	defer span.End()
+
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, franchise_id, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t
@@ -139,6 +149,9 @@ func (d DB) GetTeamsWithNBAIDs(ctx context.Context, ids []int) ([]api.Team, erro
 }
 
 func (d DB) ListTeams(ctx context.Context) ([]api.Team, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.ListTeams")
+	defer span.End()
+
 	query := `
 		SELECT id, t.name, nickname, city, city_alternate, state, country, nba_url_name, nba_short_name, nba_team_id, created_at, updated_at
 		FROM nba.team t`
@@ -176,12 +189,15 @@ func (d DB) ListTeams(ctx context.Context) ([]api.Team, error) {
 }
 
 func (d DB) UpdateTeams(ctx context.Context, teams []team.TeamUpdate) ([]api.Team, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.UpdateTeams")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
-		log.Printf("could not start db transaction with error: %v", err)
+		slog.Error("could not start db transaction with error: %v", err)
 		return nil, err
 	}
+	defer tx.Rollback(ctx)
 
 	insertTeam := `
 		INSERT INTO nba.team
@@ -241,6 +257,9 @@ func (d DB) UpdateTeams(ctx context.Context, teams []team.TeamUpdate) ([]api.Tea
 }
 
 func (d DB) NBATeamIDMappings(ctx context.Context) (map[string]string, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.NBATeamIDMappings")
+	defer span.End()
+
 	query := `
 		SELECT id, nba_team_id
 		FROM nba.team t`

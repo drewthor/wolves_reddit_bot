@@ -1,11 +1,12 @@
 package boxscore
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/drewthor/wolves_reddit_bot/util"
 	"github.com/go-chi/chi/v5"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 )
 
 type Handler interface {
@@ -13,12 +14,13 @@ type Handler interface {
 	Get(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandler(boxscoreService Service) Handler {
-	return &handler{BoxscoreService: boxscoreService}
+func NewHandler(logger *slog.Logger, boxscoreService Service) Handler {
+	return &handler{logger: logger, boxscoreService: boxscoreService}
 }
 
 type handler struct {
-	BoxscoreService Service
+	logger          *slog.Logger
+	boxscoreService Service
 }
 
 func (h *handler) Routes() chi.Router {
@@ -30,23 +32,27 @@ func (h *handler) Routes() chi.Router {
 }
 
 func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("boxscore").Start(r.Context(), "boxscore.handler.Get")
+	defer span.End()
+
 	r.ParseForm()
 	gameID := chi.URLParam(r, "gameID")
-	gameDate := r.FormValue("game_date")
-
 	if gameID == "" {
 		util.WriteJSON(http.StatusBadRequest, "invalid request: missing game_id", w)
 		return
 	}
 
+	gameDate := r.FormValue("game_date")
 	if gameDate == "" {
 		util.WriteJSON(http.StatusBadRequest, "invalid request: missing game_date", w)
 		return
 	}
 
-	boxscore, err := h.BoxscoreService.Get(gameID, gameDate)
+	logger := h.logger.With(slog.String("game_id", gameID), slog.String("game_date", gameDate))
+
+	boxscore, err := h.boxscoreService.Get(ctx, gameID, gameDate)
 	if err != nil {
-		log.Error(err)
+		logger.Error("failed to get boxscore", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

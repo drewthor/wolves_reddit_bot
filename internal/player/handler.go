@@ -1,11 +1,11 @@
 package player
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/drewthor/wolves_reddit_bot/util"
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 
 	"github.com/go-chi/chi/v5"
@@ -18,12 +18,13 @@ type Handler interface {
 	UpdatePlayers(w http.ResponseWriter, r *http.Request)
 }
 
-func NewHandler(playerService Service) Handler {
-	return &handler{PlayerService: playerService}
+func NewHandler(logger *slog.Logger, playerService Service) Handler {
+	return &handler{logger: logger, playerService: playerService}
 }
 
 type handler struct {
-	PlayerService Service
+	logger        *slog.Logger
+	playerService Service
 }
 
 func (h handler) Routes() chi.Router {
@@ -42,10 +43,10 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("player").Start(r.Context(), "player.handler.List")
 	defer span.End()
 
-	players, err := h.PlayerService.ListPlayers(ctx)
+	players, err := h.playerService.ListPlayers(ctx)
 
 	if err != nil {
-		log.Error(err)
+		h.logger.Error("failed to list players", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -54,12 +55,16 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
-	playerID := chi.URLParam(r, "id")
+	ctx, span := otel.Tracer("player").Start(r.Context(), "player.handler.Get")
+	defer span.End()
 
-	player, err := h.PlayerService.Get(r.Context(), playerID)
+	playerID := chi.URLParam(r, "id")
+	logger := h.logger.With(slog.String("player_id", playerID))
+
+	player, err := h.playerService.Get(ctx, playerID)
 
 	if err != nil {
-		log.Error(err)
+		logger.Error("failed to get player", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -68,16 +73,19 @@ func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) UpdatePlayers(w http.ResponseWriter, r *http.Request) {
+	ctx, span := otel.Tracer("player").Start(r.Context(), "player.handler.UpdatePlayers")
+	defer span.End()
+
 	seasonStartYear, err := strconv.Atoi(r.URL.Query().Get("season-start-year"))
 	if err != nil {
 		util.WriteJSON(http.StatusBadRequest, "invalid required season-start-year", w)
 		return
 	}
 
-	players, err := h.PlayerService.UpdatePlayers(r.Context(), seasonStartYear)
+	players, err := h.playerService.UpdatePlayers(ctx, seasonStartYear)
 
 	if err != nil {
-		log.Error(err)
+		h.logger.Error("failed to update players", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

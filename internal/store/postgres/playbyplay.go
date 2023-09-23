@@ -6,14 +6,18 @@ import (
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/internal/playbyplay"
+	"go.opentelemetry.io/otel"
 )
 
 func (d DB) UpdatePlayByPlays(ctx context.Context, playByPlayUpdates []playbyplay.PlayByPlayUpdate) ([]api.PlayByPlay, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.UpdatePlayByPlays")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start db transaction to update play by plays with error: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	/*
 		insertGame := `
@@ -58,7 +62,7 @@ func (d DB) UpdatePlayByPlays(ctx context.Context, playByPlayUpdates []playbypla
 				nba_game_id = coalesce(excluded.nba_game_id, g.nba_game_id)
 			RETURNING g.id`
 
-		bp := &pgx.Batch{}
+		bp := &pgxutil.Batch{}
 
 		for _, gameUpdate := range gameUpdates {
 			bp.Queue(insertGame,

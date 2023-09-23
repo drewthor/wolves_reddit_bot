@@ -2,14 +2,18 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/internal/team_season"
-	"github.com/jackc/pgx/v4"
-	log "github.com/sirupsen/logrus"
+	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
 )
 
 func (d DB) GetTeamSeasonsWithIDs(ctx context.Context, teamSeasonIDs []string) ([]api.TeamSeason, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.GetTeamSeasonsWithIDs")
+	defer span.End()
+
 	query := `
 		SELECT ts.id, ts.team_id, ts.league_id, ts.season_id, ts.conference_id, ts.division_id, ts.created_at, ts.updated_at
 		FROM nba.team_season ts
@@ -43,12 +47,14 @@ func (d DB) GetTeamSeasonsWithIDs(ctx context.Context, teamSeasonIDs []string) (
 }
 
 func (d DB) UpdateTeamSeasons(ctx context.Context, teamSeasonUpdates []team_season.TeamSeasonUpdate) ([]api.TeamSeason, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.UpdateTeamSeasons")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
-		log.Printf("could not start db transaction with error: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("could not start db transaction with error: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertQuery := `
 		INSERT INTO nba.team_season

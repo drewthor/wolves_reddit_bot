@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 	"github.com/drewthor/wolves_reddit_bot/util"
+	"go.opentelemetry.io/otel"
 )
 
 type Service interface {
@@ -28,24 +30,45 @@ type service struct {
 }
 
 func (s service) GetCurrentSeasonStartYear(ctx context.Context) (int, error) {
-	leagueSchedule, err := nba.GetLeagueSchedule(ctx, s.r2Client, util.NBAR2Bucket)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get current season start year: %w", err)
+	ctx, span := otel.Tracer("season").Start(ctx, "season.service.GetCurrentSeasonStartYear")
+	defer span.End()
+
+	//leagueSchedule, err := nba.GetLeagueSchedule(ctx, s.r2Client, util.NBAR2Bucket)
+	//if err != nil {
+	//	return 0, fmt.Errorf("failed to get current season start year: %w", err)
+	//}
+	//
+	//seasonYear, err := strconv.Atoi(strings.Split(leagueSchedule.LeagueSchedule.SeasonYear, "-")[0])
+	//if err != nil {
+	//	return 0, fmt.Errorf("failed to convert season start year to int when getting current season start year: %w", err)
+	//}
+	// TODO: don't make this static
+	now := time.Now().UTC()
+	seasonStartYear := now.Year()
+	if now.Month() <= time.September {
+		seasonStartYear--
 	}
 
-	seasonYear, err := strconv.Atoi(strings.Split(leagueSchedule.LeagueSchedule.SeasonYear, "-")[0])
-	if err != nil {
-		return 0, fmt.Errorf("failed to convert season start year to int when getting current season start year: %w", err)
-	}
-
-	return seasonYear, nil
+	return seasonStartYear, nil
 }
 
 func (s service) UpdateSeasonForLeague(ctx context.Context, leagueID string, seasonStartYear int) (string, error) {
+	ctx, span := otel.Tracer("season").Start(ctx, "season.service.UpdateSeasonForLeague")
+	defer span.End()
+
 	return "", nil
 }
+
 func (s service) UpdateSeasonWeeks(ctx context.Context) ([]SeasonWeek, error) {
-	leagueSchedule, err := nba.GetLeagueSchedule(ctx, s.r2Client, util.NBAR2Bucket)
+	ctx, span := otel.Tracer("season").Start(ctx, "season.service.UpdateSeasonWeeks")
+	defer span.End()
+
+	// TODO don't make this static
+	seasonStartYear, err := s.GetCurrentSeasonStartYear(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current season start year when updating season weeks: %w", err)
+	}
+	leagueSchedule, err := nba.GetLeagueSchedule(ctx, s.r2Client, util.NBAR2Bucket, seasonStartYear)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update season weeks: %w", err)
 	}

@@ -2,18 +2,21 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
-	"github.com/jackc/pgx/v4"
-	log "github.com/sirupsen/logrus"
+	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel"
 )
 
 func (d DB) GetPlayerWithID(ctx context.Context, playerID string) (api.Player, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.GetPlayerWithID")
+	defer span.End()
+
 	player := api.Player{}
 
 	query := `
-		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, currently_in_nba, years_pro, nba_debut_year, nba_player_id, country, created_at, updated_at 
+		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, active, years_pro, nba_debut_year, nba_player_id, country, created_at, updated_at 
 		FROM nba.player p, LATERAL (
 		        SELECT ARRAY (
 		            SELECT pos.name 
@@ -37,7 +40,7 @@ func (d DB) GetPlayerWithID(ctx context.Context, playerID string) (api.Player, e
 		&player.WeightKilograms,
 		&player.JerseyNumber,
 		&player.Positions,
-		&player.CurrentlyInNBA,
+		&player.Active,
 		&player.YearsPro,
 		&player.NBADebutYear,
 		&player.NBAPlayerID,
@@ -56,7 +59,7 @@ func (d DB) ListPlayers(ctx context.Context) ([]api.Player, error) {
 	defer span.End()
 
 	query := `
-		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, currently_in_nba, years_pro, nba_debut_year, nba_player_id, country, created_at, updated_at 
+		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, active, years_pro, nba_debut_year, nba_player_id, country, created_at, updated_at 
 		FROM nba.player p, LATERAL (
 		        SELECT ARRAY (
 		            SELECT pos.name 
@@ -88,7 +91,7 @@ func (d DB) ListPlayers(ctx context.Context) ([]api.Player, error) {
 			&player.WeightKilograms,
 			&player.JerseyNumber,
 			&player.Positions,
-			&player.CurrentlyInNBA,
+			&player.Active,
 			&player.YearsPro,
 			&player.NBADebutYear,
 			&player.NBAPlayerID,
@@ -105,8 +108,11 @@ func (d DB) ListPlayers(ctx context.Context) ([]api.Player, error) {
 }
 
 func (d DB) GetPlayersWithIDs(ctx context.Context, ids []string) ([]api.Player, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.GetPlayersWithIDs")
+	defer span.End()
+
 	query := `
-		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, currently_in_nba, years_pro, nba_debut_year, nba_player_id, country, created_at, updated_at 
+		SELECT id, first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, positions.pos_array, active, years_pro, nba_debut_year, nba_player_id, country, created_at, updated_at 
 		FROM nba.player p, LATERAL (
 		        SELECT ARRAY (
 		            SELECT pos.name 
@@ -139,7 +145,7 @@ func (d DB) GetPlayersWithIDs(ctx context.Context, ids []string) ([]api.Player, 
 			&player.WeightKilograms,
 			&player.JerseyNumber,
 			&player.Positions,
-			&player.CurrentlyInNBA,
+			&player.Active,
 			&player.YearsPro,
 			&player.NBADebutYear,
 			&player.NBAPlayerID,
@@ -156,34 +162,36 @@ func (d DB) GetPlayersWithIDs(ctx context.Context, ids []string) ([]api.Player, 
 }
 
 func (d DB) UpdatePlayers(ctx context.Context, players []api.Player) ([]api.Player, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.UpdatePlayers")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
-		log.Printf("could not start db transaction with error: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("could not start db transaction with error: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertPlayer := `
-		INSERT INTO nba.player
-			as p(first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, currently_in_nba, years_pro, nba_debut_year, nba_player_id, country)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-		ON CONFLICT (nba_player_id) DO UPDATE
-		SET 
-			first_name = coalesce(excluded.first_name, p.first_name),
-			last_name = coalesce(excluded.last_name, p.last_name),
-			birthdate = coalesce(excluded.birthdate, p.birthdate),
-			height_feet = coalesce(excluded.height_feet, p.height_feet),
-			height_inches = coalesce(excluded.height_inches, p.height_inches),
-			height_meters = coalesce(excluded.height_meters, p.height_meters),
-			weight_pounds = coalesce(excluded.weight_pounds, p.weight_pounds),
-			weight_kilograms = coalesce(excluded.weight_kilograms, p.weight_kilograms),
-			jersey_number = coalesce(excluded.jersey_number, p.jersey_number),
-			currently_in_nba = excluded.currently_in_nba,
-			years_pro = coalesce(excluded.years_pro, p.years_pro),
-			nba_debut_year = coalesce(excluded.nba_debut_year, p.nba_debut_year),
-			nba_player_id = coalesce(excluded.nba_player_id, p.nba_player_id),
-			country = coalesce(excluded.country, p.country)
-		RETURNING p.id`
+						INSERT INTO nba.player
+							as p(first_name, last_name, birthdate, height_feet, height_inches, height_meters, weight_pounds, weight_kilograms, jersey_number, active, years_pro, nba_debut_year, nba_player_id, country)
+						VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+						ON CONFLICT (nba_player_id) DO UPDATE
+						SET 
+							first_name = excluded.first_name,
+							last_name = excluded.last_name,
+							birthdate = coalesce(excluded.birthdate, p.birthdate),
+							height_feet = coalesce(excluded.height_feet, p.height_feet),
+							height_inches = coalesce(excluded.height_inches, p.height_inches),
+							height_meters = coalesce(excluded.height_meters, p.height_meters),
+							weight_pounds = coalesce(excluded.weight_pounds, p.weight_pounds),
+							weight_kilograms = coalesce(excluded.weight_kilograms, p.weight_kilograms),
+							jersey_number = coalesce(excluded.jersey_number, p.jersey_number),
+							active = excluded.active,
+							years_pro = excluded.years_pro,
+							nba_debut_year = coalesce(excluded.nba_debut_year, p.nba_debut_year),
+							nba_player_id = excluded.nba_player_id,
+							country = coalesce(excluded.country, p.country)
+						RETURNING p.id`
 
 	removeExistingPlayerPositions := `
 	DELETE FROM nba.player_position
@@ -207,7 +215,7 @@ func (d DB) UpdatePlayers(ctx context.Context, players []api.Player) ([]api.Play
 			player.WeightPounds,
 			player.WeightKilograms,
 			player.JerseyNumber,
-			player.CurrentlyInNBA,
+			player.Active,
 			player.YearsPro,
 			player.NBADebutYear,
 			player.NBAPlayerID,

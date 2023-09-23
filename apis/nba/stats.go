@@ -8,7 +8,8 @@ import (
 type endpointName string
 
 const (
-	endPointNameTeamInfoCommon = "teaminfocommon"
+	endpointNameTeamInfoCommon  = "teaminfocommon"
+	endpointNameBoxscoreSummary = "boxscoresummary"
 )
 
 type statsBaseResponse struct {

@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // This duration has come back from the NBA as MM:SS, "", and ISO8601 duration PT03M39.00S, PT240M, PT240M00.00S
@@ -23,7 +21,6 @@ func (bgc *duration) UnmarshalJSON(data []byte) error {
 
 	err := json.Unmarshal(data, &bgc.boxscoreRawValue)
 	if err != nil {
-		log.Println(errorStr)
 		return unmarshalError
 	}
 

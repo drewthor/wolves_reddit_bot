@@ -10,25 +10,35 @@ import (
 type Client interface {
 	PlayByPlayForGame(ctx context.Context, gameID string, outputWriters ...OutputWriter) (PlayByPlay, error)
 	GetCommonTeamInfo(ctx context.Context, leagueID string, teamID int) (TeamCommonInfo, error)
+	GetBoxscoreSummary(ctx context.Context, gameID string, outputWriters ...OutputWriter) (BoxscoreSummary, error)
 }
 
 type client struct {
-	client *http.Client
+	client      *http.Client
+	statsClient *http.Client
 }
 
 func NewClient() Client {
-	dialer := &net.Dialer{Timeout: time.Second}
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	c := &http.Client{
 		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			DialContext:           dialer.DialContext,
+			TLSHandshakeTimeout:   time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
+		},
+	}
+	statsC := &http.Client{
+		Timeout: 10 * time.Second,
 		Transport: nbaRoundTripper{
 			r: &http.Transport{
 				DialContext:           dialer.DialContext,
 				TLSHandshakeTimeout:   time.Second,
-				ResponseHeaderTimeout: time.Second,
+				ResponseHeaderTimeout: 10 * time.Second,
 			},
 		},
 	}
-	return &client{client: c}
+	return &client{client: c, statsClient: statsC}
 }
 
 type nbaRoundTripper struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
+	"go.opentelemetry.io/otel"
 )
 
 type Service interface {
@@ -19,5 +20,8 @@ type service struct {
 }
 
 func (s *service) UpdateArenas(ctx context.Context, arenas []ArenaUpdate) ([]api.Arena, error) {
+	ctx, span := otel.Tracer("arena").Start(ctx, "arena.service.UpdateArenas")
+	defer span.End()
+
 	return s.ArenaStore.UpdateArenas(ctx, arenas)
 }

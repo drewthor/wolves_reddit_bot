@@ -2,19 +2,22 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/drewthor/wolves_reddit_bot/internal/game_referee"
-	"github.com/jackc/pgx/v4"
-	log "github.com/sirupsen/logrus"
+	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
 )
 
 func (d DB) UpdateGameReferees(ctx context.Context, gameRefereeUpdates []game_referee.GameRefereeUpdate) ([]game_referee.GameReferee, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.UpdateGameReferees")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
-		log.Printf("could not start db transaction with error: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("could not start db transaction when updating game referees: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertGameReferee := `
 		INSERT INTO nba.game_referee

@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
-	log "github.com/sirupsen/logrus"
 )
 
 func NBASeasonStageNameMappings() map[int]string {
@@ -29,13 +29,14 @@ func NBAGameStatusNameMappings() map[int]string {
 	}
 }
 
-func WithFileOutputWriter(filepath string) FileOutputWriter {
-	return FileOutputWriter{filepath: filepath}
+func WithFileOutputWriter(logger *slog.Logger, filepath string) FileOutputWriter {
+	return FileOutputWriter{logger: logger, filepath: filepath}
 }
 
 //var _ nba.OutputWriter = FileOutputWriter{}
 
 type FileOutputWriter struct {
+	logger   *slog.Logger
 	filepath string
 }
 
@@ -62,11 +63,13 @@ func (f FileOutputWriter) Put(ctx context.Context, b []byte) error {
 }
 
 func WithR2OutputWriter(
+	logger *slog.Logger,
 	r2Client cloudflare.Client,
 	bucket string,
 	objectKey string,
 ) R2OutputWriter {
 	return R2OutputWriter{
+		logger:    logger,
 		r2Client:  r2Client,
 		bucket:    bucket,
 		objectKey: objectKey,
@@ -76,6 +79,7 @@ func WithR2OutputWriter(
 //var _ nba.OutputWriter = R2OutputWriter{}
 
 type R2OutputWriter struct {
+	logger    *slog.Logger
 	r2Client  cloudflare.Client
 	bucket    string
 	objectKey string
@@ -83,7 +87,7 @@ type R2OutputWriter struct {
 
 func (r R2OutputWriter) Put(ctx context.Context, b []byte) error {
 	if err := r.r2Client.CreateObject(ctx, r.bucket, r.objectKey, ContentTypeJSON, bytes.NewReader(b)); err != nil {
-		log.WithError(err).WithFields(log.Fields{"bucket": r.bucket, "object_key": r.objectKey}).Error("failed to write object to r2 bucket")
+		r.logger.Error("failed to write object to r2 bucket", slog.String("bucket", r.bucket), slog.String("object_key", r.objectKey), slog.Any("error", err))
 	}
 
 	return nil

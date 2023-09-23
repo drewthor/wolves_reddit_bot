@@ -6,6 +6,7 @@ import (
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
+	"go.opentelemetry.io/otel"
 )
 
 type Service interface {
@@ -21,6 +22,9 @@ type service struct {
 }
 
 func (s *service) UpdateTeamSeasons(ctx context.Context, teamIDs map[string]nba.Team, seasonStartYear int) ([]api.TeamSeason, error) {
+	ctx, span := otel.Tracer("team_season").Start(ctx, "team_season.service.UpdateTeamSeasons")
+	defer span.End()
+
 	teamSeasonUpdates := []TeamSeasonUpdate{}
 	for teamID, nbaTeam := range teamIDs {
 		league := "nba"

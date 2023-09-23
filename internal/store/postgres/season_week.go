@@ -5,15 +5,19 @@ import (
 	"fmt"
 
 	"github.com/drewthor/wolves_reddit_bot/internal/season"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
 )
 
 func (d DB) UpdateSeasonWeeks(ctx context.Context, seasonWeekUpdates []season.SeasonWeekUpdate) ([]season.SeasonWeek, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.UpdateSeasonWeeks")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start db transaction to update season weeks with error: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertGame := `
 		INSERT INTO nba.season_week

@@ -3,7 +3,6 @@ package nba
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
@@ -42,7 +41,7 @@ type TodaysScoreboard struct {
 
 type ScoreboardDetailed struct {
 	GameDate   string `json:"gameDate"`   // ex. 2021-11-08
-	LeagueID   string `json:"leagueId"`   // ex. 00 for NBA
+	LeagueID   string `json:"leagueId"`   // ex. 00 for NBA, 15 for Las Vegas, 13 for California classical, 16 for Utah, and 14 for Orlando
 	LeagueName string `json:"leagueName"` // ex. National Basketball Association
 	Games      []struct {
 		GameID            string         `json:"gameId"`         // ex. 20211108
@@ -100,7 +99,7 @@ func GetTodaysScoreboard(ctx context.Context, r2Client cloudflare.Client, bucket
 	t := time.Now().UTC().Round(time.Hour).Format(time.RFC3339)
 	filePath := os.Getenv("STORAGE_PATH") + fmt.Sprintf("/scoreboard/%s", t)
 
-	objectKey := fmt.Sprintf("scoreboard/%s_cdn", t)
+	objectKey := fmt.Sprintf("scoreboard/%s_cdn.json", t)
 
 	todaysScoreboard, err := fetchObjectAndSaveToFile[TodaysScoreboard](ctx, r2Client, todaysScoreboardURL, filePath, bucket, objectKey)
 	if err != nil {
@@ -108,47 +107,4 @@ func GetTodaysScoreboard(ctx context.Context, r2Client cloudflare.Client, bucket
 	}
 
 	return todaysScoreboard, nil
-}
-
-func GetGameScoreboard(scoreboardAPIPath, todaysDate string, gameID string) (GameScoreboard, error) {
-	templateURI := makeURIFormattable(nbaAPIBaseURI + scoreboardAPIPath)
-	url := fmt.Sprintf(templateURI, todaysDate)
-	response, err := http.Get(url)
-	if err != nil {
-		return GameScoreboard{}, fmt.Errorf("failed to get game scoreboard from nba for date %s and gameID %d from url %s %w", todaysDate, gameID, url, err)
-	}
-	defer response.Body.Close()
-
-	scoreboardResult, err := unmarshalNBAHttpResponseToJSON[Scoreboard](response.Body)
-	if err != nil {
-		return GameScoreboard{}, fmt.Errorf("failed to get game scoreboard from nba for date %s and gameID %d from url %s %w", todaysDate, gameID, url, err)
-	}
-	for _, game := range scoreboardResult.Games {
-		if game.ID == gameID {
-			return game, nil
-		}
-	}
-	return GameScoreboard{}, fmt.Errorf("could not find game with ID: %s on date: %s", gameID, todaysDate)
-}
-
-func GetGameScoreboards(ctx context.Context, r2Client cloudflare.Client, bucket string, gameDate string) (Scoreboard, error) {
-	dailyAPIPaths, err := GetDailyAPIPaths()
-	if err != nil {
-		return Scoreboard{}, err
-	}
-	gameScoreboardAPIPath := dailyAPIPaths.APIPaths.Scoreboard
-	templateURI := makeURIFormattable(nbaAPIBaseURI + gameScoreboardAPIPath)
-	url := fmt.Sprintf(templateURI, gameDate)
-
-	t := time.Now().UTC().Round(time.Hour).Format(time.RFC3339)
-	filePath := os.Getenv("STORAGE_PATH") + fmt.Sprintf("/scoreboardold/%s", t)
-
-	objectKey := fmt.Sprintf("scoreboard/%s_data", t)
-
-	gameScoreboards, err := fetchObjectAndSaveToFile[Scoreboard](ctx, r2Client, url, filePath, bucket, objectKey)
-	if err != nil {
-		return Scoreboard{}, err
-	}
-
-	return gameScoreboards, nil
 }

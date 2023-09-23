@@ -5,15 +5,19 @@ import (
 	"fmt"
 
 	"github.com/drewthor/wolves_reddit_bot/internal/team_game_stats"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
 )
 
 func (d DB) UpdateTeamGameStatsTotals(ctx context.Context, teamGameStatsTotalsUpdates []team_game_stats.TeamGameStatsTotalUpdate) ([]team_game_stats.TeamGameStatsTotal, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.UpdateTeamGameStatsTotals")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start db transaction to update team game stats totals: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertTeamGameStatsTotal := `
 		INSERT INTO nba.team_game_stats_total
@@ -298,11 +302,14 @@ func (d DB) UpdateTeamGameStatsTotals(ctx context.Context, teamGameStatsTotalsUp
 }
 
 func (d DB) UpdateTeamGameStatsTotalsOld(ctx context.Context, teamGameStatsTotalsUpdates []team_game_stats.TeamGameStatsTotalUpdateOld) ([]team_game_stats.TeamGameStatsTotal, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "postgres.DB.UpdateTeamGameStatsTotalsOld")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start db transaction to update team game stats totals: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertTeamGameStatsTotal := `
 		INSERT INTO nba.team_game_stats_total

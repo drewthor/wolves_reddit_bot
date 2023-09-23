@@ -9,14 +9,15 @@ import (
 )
 
 type Store interface {
+	List(ctx context.Context) ([]api.Game, error)
 	GetGameWithID(ctx context.Context, id string) (api.Game, error)
 	GetGamesWithIDs(ctx context.Context, ids []string) ([]api.Game, error)
 	GetGameWithNBAID(ctx context.Context, id string) (api.Game, error)
-	UpdateGamesOld(ctx context.Context, gameUpdates []GameUpdateOld) ([]api.Game, error)
+	UpdateGamesSummary(ctx context.Context, gameUpdates []GameSummaryUpdate) ([]api.Game, error)
 	UpdateGames(ctx context.Context, gameUpdates []GameUpdate) ([]api.Game, error)
 }
 
-type GameUpdateOld struct {
+type GameSummaryUpdate struct {
 	NBAGameID                       string
 	NBAHomeTeamID                   int
 	NBAAwayTeamID                   int

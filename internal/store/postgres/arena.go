@@ -2,20 +2,23 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/drewthor/wolves_reddit_bot/api"
 	"github.com/drewthor/wolves_reddit_bot/internal/arena"
-	"github.com/jackc/pgx/v4"
-	log "github.com/sirupsen/logrus"
+	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel"
 )
 
 func (d DB) UpdateArenas(ctx context.Context, arenas []arena.ArenaUpdate) ([]api.Arena, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.UpdateArenas")
+	defer span.End()
+
 	tx, err := d.pgxPool.Begin(ctx)
-	defer tx.Rollback(ctx)
 	if err != nil {
-		log.Printf("could not start db transaction with error: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to start db transaction: %w", err)
 	}
+	defer tx.Rollback(ctx)
 
 	insertArena := `
 		INSERT INTO nba.arena
@@ -67,14 +70,12 @@ func (d DB) UpdateArenas(ctx context.Context, arenas []arena.ArenaUpdate) ([]api
 
 	err = batchResults.Close()
 	if err != nil {
-		log.WithError(err).Error("could not close batchResults when updating arenas")
-		return nil, err
+		return nil, fmt.Errorf("could not close batchResults when updating arenas: %w", err)
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		log.WithError(err).Error("could not commit transaction when updating arenas")
-		return nil, err
+		return nil, fmt.Errorf("could not commit transaction when updating arenas: %w", err)
 	}
 
 	return insertedArenas, nil

@@ -1,133 +1,107 @@
 package nba
 
 import (
-	"fmt"
-	"sort"
-
-	log "github.com/sirupsen/logrus"
+	"time"
 )
 
 type Game struct {
-	GameID           string            `json:"gameId"`
-	SeasonStage      seasonStage       `json:"seasonStageId"`
-	Status           int               `json:"statusNum"`
-	StartDateEastern string            `json:"startDateEastern"`
-	StartTimeUTC     datetime          `json:"startTimeUTC"`
-	PlayoffsNode     *PlayoffsGameInfo `json:"playoffs,omitempty"`
-	HomeTeam         TeamGameInfo      `json:"hTeam"`
-	AwayTeam         TeamGameInfo      `json:"vTeam"`
-}
-
-func (s Game) IsPlayoffGame() bool {
-	return s.PlayoffsNode != nil
-}
-
-type TeamGameInfo struct {
-	ID    string `json:"teamId"`
-	Score string `json:"score"`
-}
-
-type PlayoffsGameInfo struct {
-	Round           string               `json:"roundNum"`
-	Conference      string               `json:"confName"`
-	SeriesID        string               `json:"seriesId"`
-	SeriesCompleted bool                 `json:"isSeriesCompleted"`
-	GameInSeries    string               `json:"gameNumInSeries"`
-	IsIfNecessary   bool                 `json:"isIfNecessary"`
-	HomeTeamInfo    PlayoffsGameTeamInfo `json:"hTeam"`
-	AwayTeamInfo    PlayoffsGameTeamInfo `json:"vTeam"`
-}
-
-type PlayoffsGameTeamInfo struct {
-	Seed       string `json:"seedNum"`
-	SeriesWins string `json:"seriesWin"`
-	WonSeries  bool   `json:"isSeriesWinner"`
-}
-
-// map from StartDateEastern to the Game
-type GamesByStartDate map[string]Game
-
-func (s *GamesByStartDate) HaveAnotherMatchup(opposingTeam TriCode, todaysDate string) bool {
-	for _, scheduledGame := range *s {
-		isFutureGame := scheduledGame.StartDateEastern > todaysDate
-		if scheduledGame.IsPlayoffGame() {
-			if !scheduledGame.PlayoffsNode.SeriesCompleted && !scheduledGame.PlayoffsNode.IsIfNecessary {
-				return true
-			}
-		} else if isFutureGame {
-			return true
-		}
-	}
-	return false
-}
-
-type startDateAscending []Game
-
-func (b startDateAscending) Len() int {
-	return len(b)
-}
-
-func (b startDateAscending) Swap(i, j int) {
-	b[i], b[j] = b[j], b[i]
-}
-
-func (b startDateAscending) Less(i, j int) bool {
-	firstTime, err := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[i].StartDateEastern)
-	if err != nil {
-		return false
-	}
-	secondTime, err := makeGoTimeFromAPIData("12:00 PM ET" /*startTimeEastern*/, b[j].StartDateEastern)
-	if err != nil {
-		return false
-	}
-	return firstTime.Before(secondTime)
-}
-
-func (s *GamesByStartDate) CurrentGameNumber(gameID string, stage seasonStage) (int, bool) {
-	var preSeasonGames []Game
-	var regularSeasonGames []Game
-	var postSeasonGames []Game
-
-	for _, scheduledGame := range *s {
-		switch scheduledGame.SeasonStage {
-		case preSeason:
-			preSeasonGames = append(preSeasonGames, scheduledGame)
-			break
-		case regularSeason:
-			regularSeasonGames = append(regularSeasonGames, scheduledGame)
-			break
-		case postSeason:
-			postSeasonGames = append(postSeasonGames, scheduledGame)
-			break
-		}
-	}
-	switch stage {
-	case preSeason:
-		sort.Sort(startDateAscending(preSeasonGames))
-		for i, game := range preSeasonGames {
-			if game.GameID == gameID {
-				return i + 1, true
-			}
-		}
-		break
-	case regularSeason:
-		sort.Sort(startDateAscending(regularSeasonGames))
-		for i, game := range regularSeasonGames {
-			if game.GameID == gameID {
-				return i + 1, true
-			}
-		}
-		break
-	case postSeason:
-		sort.Sort(startDateAscending(postSeasonGames))
-		for i, game := range postSeasonGames {
-			if game.GameID == gameID {
-				return i + 1, true
-			}
-		}
-		break
-	}
-	// game not found
-	log.Error(fmt.Printf("failed to find current game number from nba gameID: %s stage: %v ", gameID, stage))
-	return -1, false
+	GameID           string    `json:"gameId"`
+	GameCode         string    `json:"gameCode"`
+	GameStatus       int       `json:"gameStatus"`
+	GameStatusText   string    `json:"gameStatusText"`
+	GameSequence     int       `json:"gameSequence"`
+	GameDateEst      time.Time `json:"gameDateEst"`
+	GameTimeEst      time.Time `json:"gameTimeEst"`
+	GameDateTimeEst  time.Time `json:"gameDateTimeEst"`
+	GameDateUTC      time.Time `json:"gameDateUTC"`
+	GameTimeUTC      time.Time `json:"gameTimeUTC"`
+	GameDateTimeUTC  time.Time `json:"gameDateTimeUTC"`
+	AwayTeamTime     time.Time `json:"awayTeamTime"`
+	HomeTeamTime     time.Time `json:"homeTeamTime"`
+	Day              string    `json:"day"`
+	MonthNum         int       `json:"monthNum"`
+	WeekNumber       int       `json:"weekNumber"`
+	WeekName         string    `json:"weekName"`
+	IfNecessary      bool      `json:"ifNecessary"`
+	SeriesGameNumber string    `json:"seriesGameNumber"`
+	SeriesText       string    `json:"seriesText"`
+	ArenaName        string    `json:"arenaName"`
+	ArenaState       string    `json:"arenaState"`
+	ArenaCity        string    `json:"arenaCity"`
+	PostponedStatus  string    `json:"postponedStatus"`
+	BranchLink       string    `json:"branchLink"`
+	Broadcasters     struct {
+		NationalTvBroadcasters []struct {
+			BroadcasterScope        string `json:"broadcasterScope"`
+			BroadcasterMedia        string `json:"broadcasterMedia"`
+			BroadcasterID           int    `json:"broadcasterId"`
+			BroadcasterDisplay      string `json:"broadcasterDisplay"`
+			BroadcasterAbbreviation string `json:"broadcasterAbbreviation"`
+			TapeDelayComments       string `json:"tapeDelayComments"`
+			RegionID                int    `json:"regionId"`
+		} `json:"nationalTvBroadcasters"`
+		NationalRadioBroadcasters []interface{} `json:"nationalRadioBroadcasters"`
+		HomeTvBroadcasters        []struct {
+			BroadcasterScope        string `json:"broadcasterScope"`
+			BroadcasterMedia        string `json:"broadcasterMedia"`
+			BroadcasterID           int    `json:"broadcasterId"`
+			BroadcasterDisplay      string `json:"broadcasterDisplay"`
+			BroadcasterAbbreviation string `json:"broadcasterAbbreviation"`
+			TapeDelayComments       string `json:"tapeDelayComments"`
+			RegionID                int    `json:"regionId"`
+		} `json:"homeTvBroadcasters"`
+		HomeRadioBroadcasters []struct {
+			BroadcasterScope        string `json:"broadcasterScope"`
+			BroadcasterMedia        string `json:"broadcasterMedia"`
+			BroadcasterID           int    `json:"broadcasterId"`
+			BroadcasterDisplay      string `json:"broadcasterDisplay"`
+			BroadcasterAbbreviation string `json:"broadcasterAbbreviation"`
+			TapeDelayComments       string `json:"tapeDelayComments"`
+			RegionID                int    `json:"regionId"`
+		} `json:"homeRadioBroadcasters"`
+		AwayTvBroadcasters    []interface{} `json:"awayTvBroadcasters"`
+		AwayRadioBroadcasters []struct {
+			BroadcasterScope        string `json:"broadcasterScope"`
+			BroadcasterMedia        string `json:"broadcasterMedia"`
+			BroadcasterID           int    `json:"broadcasterId"`
+			BroadcasterDisplay      string `json:"broadcasterDisplay"`
+			BroadcasterAbbreviation string `json:"broadcasterAbbreviation"`
+			TapeDelayComments       string `json:"tapeDelayComments"`
+			RegionID                int    `json:"regionId"`
+		} `json:"awayRadioBroadcasters"`
+		IntlRadioBroadcasters []interface{} `json:"intlRadioBroadcasters"`
+		IntlTvBroadcasters    []interface{} `json:"intlTvBroadcasters"`
+	} `json:"broadcasters"`
+	HomeTeam struct {
+		TeamID      int    `json:"teamId"`
+		TeamName    string `json:"teamName"`
+		TeamCity    string `json:"teamCity"`
+		TeamTricode string `json:"teamTricode"`
+		TeamSlug    string `json:"teamSlug"`
+		Wins        int    `json:"wins"`
+		Losses      int    `json:"losses"`
+		Score       int    `json:"score"`
+		Seed        int    `json:"seed"`
+	} `json:"homeTeam"`
+	AwayTeam struct {
+		TeamID      int    `json:"teamId"`
+		TeamName    string `json:"teamName"`
+		TeamCity    string `json:"teamCity"`
+		TeamTricode string `json:"teamTricode"`
+		TeamSlug    string `json:"teamSlug"`
+		Wins        int    `json:"wins"`
+		Losses      int    `json:"losses"`
+		Score       int    `json:"score"`
+		Seed        int    `json:"seed"`
+	} `json:"awayTeam"`
+	PointsLeaders []struct {
+		PersonID    int     `json:"personId"`
+		FirstName   string  `json:"firstName"`
+		LastName    string  `json:"lastName"`
+		TeamID      int     `json:"teamId"`
+		TeamCity    string  `json:"teamCity"`
+		TeamName    string  `json:"teamName"`
+		TeamTricode string  `json:"teamTricode"`
+		Points      float64 `json:"points"`
+	} `json:"pointsLeaders"`
 }
