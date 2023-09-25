@@ -19,12 +19,12 @@ type client struct {
 }
 
 func NewClient() Client {
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 10 * time.Second}
 	c := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DialContext:           dialer.DialContext,
-			TLSHandshakeTimeout:   time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
 			ResponseHeaderTimeout: 10 * time.Second,
 		},
 	}
@@ -33,7 +33,7 @@ func NewClient() Client {
 		Transport: nbaRoundTripper{
 			r: &http.Transport{
 				DialContext:           dialer.DialContext,
-				TLSHandshakeTimeout:   time.Second,
+				TLSHandshakeTimeout:   10 * time.Second,
 				ResponseHeaderTimeout: 10 * time.Second,
 			},
 		},
