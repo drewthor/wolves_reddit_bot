@@ -15,6 +15,7 @@ type Store interface {
 	GetGameWithNBAID(ctx context.Context, id string) (api.Game, error)
 	UpdateGamesSummary(ctx context.Context, gameUpdates []GameSummaryUpdate) ([]api.Game, error)
 	UpdateGames(ctx context.Context, gameUpdates []GameUpdate) ([]api.Game, error)
+	UpdateScheduledGames(ctx context.Context, gameUpdates []GameScheduledUpdate) ([]api.Game, error)
 }
 
 type GameSummaryUpdate struct {
@@ -52,4 +53,17 @@ type GameUpdate struct {
 	RegulationPeriods               int
 	StartTime                       time.Time
 	EndTime                         sql.NullTime
+}
+
+type GameScheduledUpdate struct {
+	NBAGameID       string
+	NBAHomeTeamID   sql.NullInt64
+	NBAAwayTeamID   sql.NullInt64
+	HomeTeamPoints  sql.NullInt64
+	AwayTeamPoints  sql.NullInt64
+	GameStatusName  string
+	NBAArenaName    string
+	SeasonStartYear int
+	SeasonStageName string
+	StartTime       time.Time
 }

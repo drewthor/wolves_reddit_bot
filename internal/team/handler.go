@@ -46,7 +46,7 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 	teams, err := h.teamService.ListTeams(ctx)
 
 	if err != nil {
-		h.logger.Error("failed to list teams", slog.Any("error", err))
+		h.logger.ErrorContext(ctx, "failed to list teams", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -64,7 +64,7 @@ func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
 	team, err := h.teamService.Get(ctx, teamID)
 
 	if err != nil {
-		logger.Error("failed to get team", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to get team", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -84,10 +84,10 @@ func (h *handler) UpdateTeams(w http.ResponseWriter, r *http.Request) {
 
 	logger := h.logger.With(slog.Int("season_start_year", seasonStartYear))
 
-	teams, err := h.teamService.UpdateTeams(ctx, seasonStartYear)
+	teams, err := h.teamService.UpdateTeamsForSeason(ctx, seasonStartYear)
 
 	if err != nil {
-		logger.Error("failed to update teams", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to update teams", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

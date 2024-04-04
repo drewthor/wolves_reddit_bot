@@ -1,11 +1,11 @@
 package nba
 
-type SeasonStage int
+type SeasonStage string
 
 const (
-	Pre     SeasonStage = 1
-	Regular SeasonStage = 2
-	AllStar SeasonStage = 3
-	Post    SeasonStage = 4
-	PlayIn  SeasonStage = 5
+	SeasonStagePreseason SeasonStage = "Preseason"
+	SeasonStageRegular   SeasonStage = ""         // NBA appears to use empty string as regular season game for SeriesText in its API
+	SeasonStageAllStar   SeasonStage = "AllStar"  // TODO: this is a guess
+	SeasonStagePost      SeasonStage = "Playoffs" // TODO: this is a guess
+	SeasonStagePlayIn    SeasonStage = "PlayIn"   // TODO: this is a guess
 )

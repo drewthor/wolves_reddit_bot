@@ -1,42 +1,24 @@
 package nba
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const (
-	teamsURL              = "https://data.nba.net/prod/v2/%d/teams.json"
 	teamLogoUrl           = "https://cdn.nba.com/logos/nba/%d/primary/L/logo.svg"
 	teamCommonInfoBaseURL = "https://stats.nba.com/stats/teaminfocommon?"
+	teamStandingsURL      = "https://stats.nba.com/stats/leaguestandingsv3?"
 )
-
-type TeamsResult struct {
-	LeagueNode struct {
-		NBA        []Team `json:"standard"`
-		Vegas      []Team `json:"vegas,omitempty"`
-		Sacramento []Team `json:"sacramento,omitempty"`
-		Utah       []Team `json:"utah,omitempty"`
-	} `json:"league"`
-}
-
-type Team struct {
-	IsNBAFranchise bool    `json:"isNBAFranchise"`
-	ID             string  `json:"teamId"`
-	TriCode        TriCode `json:"tricode"`
-	FullName       string  `json:"fullName"`
-	ShortName      string  `json:"teamShortName"`
-	Nickname       string  `json:"nickname"`
-	City           string  `json:"city"`
-	AlternateCity  string  `json:"altCityName"`
-	UrlName        string  `json:"urlName"`
-	Conference     string  `json:"confName"`
-	Division       string  `json:"divName"`
-	AllStar        bool    `json:"isAllStar"`
-}
 
 type TeamCommonInfo struct {
 	TeamID          int
@@ -52,61 +34,35 @@ type TeamCommonInfo struct {
 	SeasonIDs       []int
 }
 
-func GetTeamsForSeason(seasonStartYear int) ([]Team, error) {
-	url := fmt.Sprintf(teamsURL, seasonStartYear)
-	response, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
-	}
-	defer response.Body.Close()
+func (c Client) CommonTeamInfo(ctx context.Context, leagueID string, teamID int) (TeamCommonInfo, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "nba.Client.CommonTeamInfo")
+	defer span.End()
 
-	teamsResult, err := unmarshalNBAHttpResponseToJSON[TeamsResult](response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
-	}
-	teams := []Team{}
-	for _, team := range teamsResult.LeagueNode.NBA {
-		teams = append(teams, team)
-	}
-
-	return teams, nil
-}
-
-func GetTeams(teamsAPIPath string) ([]Team, error) {
-	url := nbaAPIBaseURI + teamsAPIPath
-	response, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
-	}
-	defer response.Body.Close()
-
-	teamsResult, err := unmarshalNBAHttpResponseToJSON[TeamsResult](response.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current teams from nba from url %s", url)
-	}
-	teams := []Team{}
-	for _, team := range teamsResult.LeagueNode.NBA {
-		teams = append(teams, team)
-	}
-
-	return teams, nil
-}
-
-func (c client) GetCommonTeamInfo(ctx context.Context, leagueID string, teamID int) (TeamCommonInfo, error) {
 	urlValues := url.Values{
 		"LeagueID": {leagueID},
 		"TeamID":   {strconv.Itoa(teamID)},
 	}
 	teamURL := teamCommonInfoBaseURL + urlValues.Encode()
-	response, err := c.statsClient.Get(teamURL)
+
+	req, err := retryablehttp.NewRequest(http.MethodGet, teamURL, nil)
 	if err != nil {
-		return TeamCommonInfo{}, fmt.Errorf("failed to get current teams from nba from url %s", teamURL)
+		return TeamCommonInfo{}, fmt.Errorf("failed to create request to get common team info: %w", err)
+	}
+	response, err := c.statsClient.Do(req)
+	if err != nil {
+		return TeamCommonInfo{}, fmt.Errorf("failed to get current teams from nba from url %s: %w", teamURL, err)
 	}
 	defer response.Body.Close()
 
 	teamsResult, err := unmarshalNBAHttpResponseToJSON[statsBaseResponse](response.Body)
 	if err != nil {
-		return TeamCommonInfo{}, fmt.Errorf("failed to get current teams from nba from url %s", teamURL)
+		gzipReader, gzipErr := gzip.NewReader(response.Body)
+		if gzipErr != nil {
+			return TeamCommonInfo{}, fmt.Errorf("failed to unmarshal json for nba team from url %s: %w: %w", teamURL, gzipErr, err)
+		}
+		defer gzipReader.Close()
+		respBody, _ := io.ReadAll(gzipReader)
+		return TeamCommonInfo{}, fmt.Errorf("failed to unmarshal json for nba team from url %s: %s: %w", teamURL, respBody, err)
 	}
 
 	teamCommonInfo := TeamCommonInfo{}
@@ -215,4 +171,91 @@ func (c client) GetCommonTeamInfo(ctx context.Context, leagueID string, teamID i
 	}
 
 	return teamCommonInfo, nil
+}
+
+type TeamStanding struct {
+	LeagueID        string
+	SeasonStartYear int
+	SeasonType      SeasonType
+	TeamID          int
+	Conference      string
+	Division        string
+}
+
+func (c Client) TeamStandings(ctx context.Context, leagueID string, seasonStartYear int, seasonType SeasonType) ([]TeamStanding, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "nba.Client.TeamStandings")
+	defer span.End()
+
+	urlValues := url.Values{
+		"LeagueID":   {leagueID},
+		"Season":     {strconv.Itoa(seasonStartYear)},
+		"SeasonType": {string(seasonType)},
+	}
+	u := teamStandingsURL + urlValues.Encode()
+
+	req, err := retryablehttp.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request to get team standings: %w", err)
+	}
+	response, err := c.statsClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get team standings from nba from url %s: %w", u, err)
+	}
+	defer response.Body.Close()
+
+	if response.Header.Get("Content-Encoding") == "gzip" {
+		response.Body, err = gzip.NewReader(response.Body)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, fmt.Errorf("failed to create gzip reader when getting nba team standings: %w", err)
+		}
+	}
+
+	teamsResult, err := unmarshalNBAHttpResponseToJSON[statsBaseResponse](response.Body)
+	if err != nil {
+		respBody, _ := io.ReadAll(response.Body)
+		return nil, fmt.Errorf("failed to unmarshal json for team standings from url %s: %s: %w", u, respBody, err)
+	}
+
+	var teamStandings []TeamStanding
+	for _, resultSet := range teamsResult.ResultSets {
+		headersMap := make(map[string]int, len(resultSet.Headers))
+		for i, header := range resultSet.Headers {
+			headersMap[header] = i
+		}
+
+		switch resultSet.Name {
+		case "Standings":
+			for _, rowSet := range resultSet.RowSet {
+				teamID, err := parseRowSetValue[int](headersMap, rowSet, "TeamID")
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse teamID from nba stats TeamInfoCommon endpoint: %w", err)
+				}
+
+				conference, err := parseRowSetValue[string](headersMap, rowSet, "Conference")
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse conference from nba stats TeamInfoCommon endpoint: %w", err)
+				}
+
+				division, err := parseRowSetValue[string](headersMap, rowSet, "Division")
+				if err != nil {
+					return nil, fmt.Errorf("failed to parse division from nba stats TeamInfoCommon endpoint: %w", err)
+				}
+
+				teamStandings = append(teamStandings, TeamStanding{
+					LeagueID:        leagueID,
+					SeasonStartYear: seasonStartYear,
+					SeasonType:      seasonType,
+					TeamID:          teamID,
+					Conference:      conference,
+					Division:        division,
+				})
+			}
+
+			break
+		}
+	}
+
+	return teamStandings, nil
 }

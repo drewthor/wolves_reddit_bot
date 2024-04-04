@@ -83,7 +83,7 @@ func (d DB) GetTeamsWithIDs(ctx context.Context, ids []uuid.UUID) ([]api.Team, e
 	teams := []api.Team{}
 
 	for rows.Next() {
-		team := api.Team{}
+		var team api.Team
 		err = rows.Scan(
 			&team.ID,
 			&team.Name,
@@ -121,10 +121,10 @@ func (d DB) GetTeamsWithNBAIDs(ctx context.Context, ids []int) ([]api.Team, erro
 		return nil, err
 	}
 
-	teams := []api.Team{}
+	var teams []api.Team
 
 	for rows.Next() {
-		team := api.Team{}
+		var team api.Team
 		err = rows.Scan(
 			&team.ID,
 			&team.Name,
@@ -164,7 +164,7 @@ func (d DB) ListTeams(ctx context.Context) ([]api.Team, error) {
 	teams := []api.Team{}
 
 	for rows.Next() {
-		team := api.Team{}
+		var team api.Team
 		err = rows.Scan(
 			&team.ID,
 			&team.Name,
@@ -201,18 +201,19 @@ func (d DB) UpdateTeams(ctx context.Context, teams []team.TeamUpdate) ([]api.Tea
 
 	insertTeam := `
 		INSERT INTO nba.team
-			as t(name, nickname, city, city_alternate, nba_url_name, nba_short_name, nba_team_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+			(name, nickname, city, city_alternate, franchise_id, nba_url_name, nba_short_name, nba_team_id)
+		VALUES ($1, $2, $3, $4, (SELECT id FROM nba.franchise WHERE nba_team_id = $5), $6, $7, $5)
 		ON CONFLICT (nba_team_id) DO UPDATE
 		SET 
-			name = coalesce(excluded.name, t.name),
-			nickname = coalesce(excluded.nickname, t.nickname),
-			city = coalesce(excluded.city, t.city),
-			city_alternate = coalesce(excluded.city_alternate, t.city_alternate),
-			nba_url_name = coalesce(excluded.nba_url_name, t.nba_url_name),
-			nba_short_name = coalesce(excluded.nba_short_name, t.nba_short_name),
-			nba_team_id = coalesce(excluded.nba_team_id, t.nba_team_id)
-		RETURNING t.id`
+			name = coalesce(excluded.name, nba.team.name),
+			nickname = coalesce(excluded.nickname, nba.team.nickname),
+			city = coalesce(excluded.city, nba.team.city),
+			city_alternate = coalesce(excluded.city_alternate, nba.team.city_alternate),
+			franchise_id = coalesce(excluded.franchise_id, nba.team.franchise_id),
+			nba_url_name = coalesce(excluded.nba_url_name, nba.team.nba_url_name),
+			nba_short_name = coalesce(excluded.nba_short_name, nba.team.nba_short_name),
+			nba_team_id = coalesce(excluded.nba_team_id, nba.team.nba_team_id)
+		RETURNING nba.team.*`
 
 	b := &pgx.Batch{}
 
@@ -223,24 +224,35 @@ func (d DB) UpdateTeams(ctx context.Context, teams []team.TeamUpdate) ([]api.Tea
 			team.Nickname,
 			team.City,
 			team.AlternateCity,
+			team.NBATeamID,
 			team.NBAURLName,
-			team.NBAShortName,
-			team.NBATeamID)
+			team.NBAShortName)
 	}
 
 	batchResults := tx.SendBatch(ctx, b)
 
-	insertedTeamIDs := []uuid.UUID{}
+	var updatedTeams []api.Team
 
 	for _ = range teams {
-		var id uuid.UUID
-		err := batchResults.QueryRow().Scan(&id)
+		var t api.Team
+		err = batchResults.QueryRow().Scan(
+			&t.ID,
+			&t.Name,
+			&t.Nickname,
+			&t.City,
+			&t.AlternateCity,
+			&t.State,
+			&t.Country,
+			&t.FranchiseID,
+			&t.NBAURLName,
+			&t.NBAShortName,
+			&t.NBATeamID,
+			&t.CreatedAt,
+			&t.UpdatedAt)
 		if err != nil {
-			batchResults.Close()
 			return nil, err
 		}
-
-		insertedTeamIDs = append(insertedTeamIDs, id)
+		updatedTeams = append(updatedTeams, t)
 	}
 
 	err = batchResults.Close()
@@ -253,7 +265,7 @@ func (d DB) UpdateTeams(ctx context.Context, teams []team.TeamUpdate) ([]api.Tea
 		return nil, err
 	}
 
-	return d.GetTeamsWithIDs(ctx, insertedTeamIDs)
+	return updatedTeams, nil
 }
 
 func (d DB) NBATeamIDMappings(ctx context.Context) (map[string]string, error) {

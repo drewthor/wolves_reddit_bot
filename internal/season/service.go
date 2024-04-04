@@ -7,9 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
-	"github.com/drewthor/wolves_reddit_bot/util"
 	"go.opentelemetry.io/otel"
 )
 
@@ -19,14 +17,14 @@ type Service interface {
 	UpdateSeasonWeeks(ctx context.Context) ([]SeasonWeek, error)
 }
 
-func NewService(seasonStore Store, r2Client cloudflare.Client) Service {
-	return &service{seasonStore: seasonStore, r2Client: r2Client}
+func NewService(seasonStore Store, nbaClient nba.Client) Service {
+	return &service{seasonStore: seasonStore, nbaClient: nbaClient}
 }
 
 type service struct {
 	seasonStore Store
 
-	r2Client cloudflare.Client
+	nbaClient nba.Client
 }
 
 func (s service) GetCurrentSeasonStartYear(ctx context.Context) (int, error) {
@@ -68,7 +66,10 @@ func (s service) UpdateSeasonWeeks(ctx context.Context) ([]SeasonWeek, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current season start year when updating season weeks: %w", err)
 	}
-	leagueSchedule, err := nba.GetLeagueSchedule(ctx, s.r2Client, util.NBAR2Bucket, seasonStartYear)
+
+	t := time.Now().UTC().Round(time.Hour).Format(time.RFC3339)
+	objectKey := fmt.Sprintf("schedule/%d/%s_cdn.json", seasonStartYear, t)
+	leagueSchedule, err := s.nbaClient.CurrentLeagueSchedule(ctx, objectKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update season weeks: %w", err)
 	}

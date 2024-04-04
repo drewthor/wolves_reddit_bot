@@ -5,17 +5,19 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"os"
+	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
-
-// play by play https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_0022000180.json
 
 const BoxscoreURL = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_%s.json"
 
@@ -30,7 +32,7 @@ type Boxscore struct {
 		TotalDurationMinutes int                `json:"duration"`          // duration in minutes (real world time) from tipoff to final buzzer
 		GameCode             string             `json:"gameCode"`          // ex. 20210714/PHXMIL
 		GameStatusText       string             `json:"gameStatusText"`    // ex. [Q3 03:03, Final]
-		GameStatus           int                `json:"gameStatus"`        // ex. [1 - scheduled, 2 - in progress, 3 - final]
+		GameStatus           GameStatus         `json:"gameStatus"`        // ex. [1 - scheduled, 2 - in progress, 3 - final]
 		RegulationPeriods    int                `json:"regulationPeriods"` // not sure why this would be anything but 4?
 		Period               int                `json:"period"`
 		GameClock            duration           `json:"gameClock"` // ex. PT11M34.00S
@@ -362,22 +364,21 @@ func (b Boxscore) Final() bool {
 }
 
 type BoxscoreSummary struct {
-	GameDate                          time.Time
-	GameInSequence                    int // ex. game in season series between opponents or playoff round game number
-	GameID                            string
-	GameStatusID                      int    // ex. [1 - scheduled, 2 - in progress, 3 - final]
-	GameStatusText                    string // ex. Final
-	GameCode                          string // ex. 20180207/MINCLE
-	HomeTeam                          BoxscoreSummaryTeam
-	AwayTeam                          BoxscoreSummaryTeam
-	SeasonStartYear                   int
-	Period                            int
-	PCTime                            string // no idea what this is
-	NationalTVBroadcasterAbbreviation string // ex. ESPN
-	PeriodTimeBroadcast               string // ex. Q5  - ESPN
-	WHStatus                          int    // no idea what this is
-	Attendance                        int
-	GameDurationSeconds               time.Duration
+	GameDate            time.Time
+	GameInSequence      int // ex. game in season series between opponents or playoff round game number
+	GameID              string
+	GameStatusID        GameStatus // ex. [1 - scheduled, 2 - in progress, 3 - final]
+	GameStatusText      string     // ex. Final
+	GameCode            string     // ex. 20180207/MINCLE
+	HomeTeam            BoxscoreSummaryTeam
+	AwayTeam            BoxscoreSummaryTeam
+	SeasonStartYear     int
+	Period              int
+	PCTime              string // no idea what this is
+	TVBroadcasts        []BoxscoreSummaryTVBroadcast
+	WHStatus            int // no idea what this is
+	Attendance          int
+	GameDurationSeconds time.Duration
 	//"GAME_DATE_EST",
 	//"GAME_SEQUENCE",
 	//"GAME_ID",
@@ -431,6 +432,11 @@ type BoxscoreSummaryTeam struct {
 	LineScores []boxscoreSummaryLineScore
 }
 
+type BoxscoreSummaryTVBroadcast struct {
+	NationalTVBroadcasterAbbreviation *string // ex. ESPN
+	PeriodTimeBroadcast               string  // ex. Q5  - ESPN
+}
+
 type boxscoreSummaryLineScore struct {
 	Period int
 	Score  int
@@ -448,6 +454,8 @@ type BoxscoreSummaryOfficial struct {
 }
 
 type BoxscoreSummaryLineScore struct {
+	TeamID int
+	Points int
 	//"GAME_DATE_EST",
 	//"GAME_SEQUENCE",
 	//"GAME_ID",
@@ -474,46 +482,133 @@ type BoxscoreSummaryLineScore struct {
 }
 
 // preferred: new boxscore with more stats, details, ids. however, returns error if game is in the future
-func GetBoxscoreDetailed(ctx context.Context, r2Client cloudflare.Client, bucket string, gameID string, seasonStartYear int) (Boxscore, error) {
-	filename := fmt.Sprintf(os.Getenv("STORAGE_PATH")+"/boxscore/%d/%s.json", seasonStartYear, gameID)
+func (c Client) GetBoxscoreDetailed(ctx context.Context, gameID string, objectKey string) (Boxscore, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "nba.Client.GetBoxscoreDetailed")
+	defer span.End()
 
 	url := fmt.Sprintf(BoxscoreURL, gameID)
 
-	objectKey := fmt.Sprintf("boxscore/%d/%s_cdn.json", seasonStartYear, gameID)
-
-	boxscore, err := fetchObjectFromFileOrURL[Boxscore](ctx, r2Client, url, filename, bucket, objectKey, func(b Boxscore) bool { return b.Final() })
+	req, err := retryablehttp.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return Boxscore{}, err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return Boxscore{}, fmt.Errorf("failed to create request to get boxscore: %w", err)
 	}
 
-	return boxscore, nil
-}
-
-const boxscoreSummaryV2URL = "https://stats.nba.com/stats/boxscoresummaryv2?GameID=%s"
-
-func (c client) GetBoxscoreSummary(ctx context.Context, gameID string, outputWriters ...OutputWriter) (BoxscoreSummary, error) {
-	response, err := c.statsClient.Get(fmt.Sprintf(boxscoreSummaryV2URL, gameID))
+	response, err := c.client.Do(req)
 	if err != nil {
-		return BoxscoreSummary{}, err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return Boxscore{}, fmt.Errorf("failed to get Boxscore object: %w", err)
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != 200 {
-		return BoxscoreSummary{}, fmt.Errorf("failed to get BoxscoreSummary object")
-	}
-
-	if response.Header.Get("Content-Encoding") == "gzip" {
-		response.Body, err = gzip.NewReader(response.Body)
-		if err != nil {
-			return BoxscoreSummary{}, fmt.Errorf("failed to create gzip reader when getting nba boxscore summary: %w", err)
+		err = fmt.Errorf("failed to successfully get Boxscore object")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if slices.Contains([]int{http.StatusNotFound, http.StatusForbidden}, response.StatusCode) {
+			return Boxscore{}, ErrNotFound
 		}
+		return Boxscore{}, err
 	}
 
 	var respBody []byte
 	respBody, err = io.ReadAll(response.Body)
-
-	boxscoreResult, err := unmarshalNBAHttpResponseToJSON[statsBaseResponse](bytes.NewReader(respBody))
 	if err != nil {
+		span.RecordError(err)
+	}
+
+	if c.Cache != nil {
+		if err := c.Cache.PutObject(ctx, objectKey, bytes.NewReader(respBody)); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return Boxscore{}, fmt.Errorf("failed to cache boxscore object: %w", err)
+		}
+	}
+
+	var scoreboard Boxscore
+	if err := json.Unmarshal(respBody, &scoreboard); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return Boxscore{}, fmt.Errorf("failed to unmarshal boxscore json: %w", err)
+	}
+
+	return scoreboard, nil
+}
+
+const boxscoreSummaryV2URL = "https://stats.nba.com/stats/boxscoresummaryv2?GameID=%s"
+
+func (c Client) GetBoxscoreSummary(ctx context.Context, gameID string, objectKey string) (BoxscoreSummary, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "nba.Client.GetBoxscoreSummary")
+	defer span.End()
+
+	var data []byte
+
+	if c.Cache != nil {
+		obj, err := c.Cache.GetObject(ctx, objectKey)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return BoxscoreSummary{}, fmt.Errorf("failed to get boxscore summary from cache: %w", err)
+		}
+		data = obj
+	}
+
+	if data == nil {
+		req, err := retryablehttp.NewRequest(http.MethodGet, fmt.Sprintf(boxscoreSummaryV2URL, gameID), nil)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return BoxscoreSummary{}, fmt.Errorf("failed to create request to get boxscore summary: %w", err)
+		}
+
+		response, err := c.statsClient.Do(req)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return BoxscoreSummary{}, fmt.Errorf("failed to get BoxscoreSummary object: %w", err)
+		}
+		defer response.Body.Close()
+
+		if response.StatusCode != 200 {
+			err = fmt.Errorf("failed to successfully get BoxscoreSummary object")
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			if slices.Contains([]int{http.StatusNotFound}, response.StatusCode) {
+				return BoxscoreSummary{}, ErrNotFound
+			}
+			return BoxscoreSummary{}, err
+		}
+
+		if response.Header.Get("Content-Encoding") == "gzip" {
+			response.Body, err = gzip.NewReader(response.Body)
+			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return BoxscoreSummary{}, fmt.Errorf("failed to create gzip reader when getting nba boxscore summary: %w", err)
+			}
+		}
+
+		var respBody []byte
+		respBody, err = io.ReadAll(response.Body)
+		if err != nil {
+			return BoxscoreSummary{}, fmt.Errorf("failed to read response body when getting nba boxscore summary: %w", err)
+		}
+
+		if c.Cache != nil {
+			if err := c.Cache.PutObject(ctx, objectKey, bytes.NewReader(respBody)); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return BoxscoreSummary{}, fmt.Errorf("failed to cache boxscore summary object: %w", err)
+			}
+		}
+
+		data = respBody
+	}
+
+	boxscoreResult, err := unmarshalNBAHttpResponseToJSON[statsBaseResponse](bytes.NewReader(data))
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return BoxscoreSummary{}, fmt.Errorf("failed to get boxscore summary response: %w", err)
 	}
 
@@ -527,42 +622,60 @@ func (c client) GetBoxscoreSummary(ctx context.Context, gameID string, outputWri
 
 		switch resultSet.Name {
 		case "GameSummary":
-			if len(resultSet.RowSet) != 1 {
-				return BoxscoreSummary{}, fmt.Errorf("failed to parse BoxscoreSummary from nba stats BoxscoreSummaryV2 endpoint: expected 1 row set and got %d", len(resultSet.RowSet))
+			if len(resultSet.RowSet) < 1 {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return BoxscoreSummary{}, err
 			}
+
+			// grab basic game info from the first row set. The data should be the same, the different row sets are just duplicated for each broadcaster
 			rowSet := resultSet.RowSet[0]
 
 			gameDateESTStr, err := parseRowSetValue[string](headersMap, rowSet, "GAME_DATE_EST")
 			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse response from stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 			eastCoastLoc, err := time.LoadLocation("America/New_York")
 			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return BoxscoreSummary{}, fmt.Errorf("failed to load east coast location for parsing game date est from stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 			gameDateEST, err := time.ParseInLocation(nbaStatsTimestampFormat, gameDateESTStr, eastCoastLoc)
 			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse game date est from stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 			gameDateUTC := gameDateEST.UTC()
 
 			gameSequence, err := parseRowSetValue[float64](headersMap, rowSet, "GAME_SEQUENCE")
 			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse game sequence from stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 
 			gID, err := parseRowSetValue[string](headersMap, rowSet, "GAME_ID")
 			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse gameID from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 
 			gameStatusID, err := parseRowSetValue[float64](headersMap, rowSet, "GAME_STATUS_ID")
 			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse game status ID from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 
 			gameStatusText, err := parseRowSetValue[string](headersMap, rowSet, "GAME_STATUS_TEXT")
 			if err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse game status text from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 
@@ -601,25 +714,33 @@ func (c client) GetBoxscoreSummary(ctx context.Context, gameID string, outputWri
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse live pc time from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 
-			natlTVBroadcasterAbbr, err := parseRowSetValue[string](headersMap, rowSet, "NATL_TV_BROADCASTER_ABBREVIATION")
-			if err != nil {
-				return BoxscoreSummary{}, fmt.Errorf("failed to parse natl tv broadcaster abbreviation from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
-			}
-
-			livePeriodTimeBroadcast, err := parseRowSetValue[string](headersMap, rowSet, "LIVE_PERIOD_TIME_BCAST")
-			if err != nil {
-				return BoxscoreSummary{}, fmt.Errorf("failed to parse live period time broadcast from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
-			}
-
 			whStatus, err := parseRowSetValue[float64](headersMap, rowSet, "WH_STATUS")
 			if err != nil {
 				return BoxscoreSummary{}, fmt.Errorf("failed to parse wh status from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
 			}
 
+			var tvBroadcasts []BoxscoreSummaryTVBroadcast
+			for _, rs := range resultSet.RowSet {
+				natlTVBroadcasterAbbr, err := parseRowSetValue[*string](headersMap, rs, "NATL_TV_BROADCASTER_ABBREVIATION")
+				if err != nil {
+					return BoxscoreSummary{}, fmt.Errorf("failed to parse natl tv broadcaster abbreviation from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
+				}
+
+				livePeriodTimeBroadcast, err := parseRowSetValue[string](headersMap, rs, "LIVE_PERIOD_TIME_BCAST")
+				if err != nil {
+					return BoxscoreSummary{}, fmt.Errorf("failed to parse live period time broadcast from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
+				}
+
+				tvBroadcasts = append(tvBroadcasts, BoxscoreSummaryTVBroadcast{
+					NationalTVBroadcasterAbbreviation: natlTVBroadcasterAbbr,
+					PeriodTimeBroadcast:               livePeriodTimeBroadcast,
+				})
+			}
+
 			boxscoreSummary.GameDate = gameDateUTC
 			boxscoreSummary.GameInSequence = int(gameSequence)
 			boxscoreSummary.GameID = gID
-			boxscoreSummary.GameStatusID = int(gameStatusID)
+			boxscoreSummary.GameStatusID = GameStatus(int(gameStatusID))
 			boxscoreSummary.GameStatusText = gameStatusText
 			boxscoreSummary.GameCode = gameCode
 			boxscoreSummary.HomeTeam.TeamID = int(homeTeamID)
@@ -627,8 +748,7 @@ func (c client) GetBoxscoreSummary(ctx context.Context, gameID string, outputWri
 			boxscoreSummary.SeasonStartYear = seasonStartYear
 			boxscoreSummary.Period = int(livePeriod)
 			boxscoreSummary.PCTime = livePCTime
-			boxscoreSummary.NationalTVBroadcasterAbbreviation = natlTVBroadcasterAbbr
-			boxscoreSummary.PeriodTimeBroadcast = livePeriodTimeBroadcast
+			boxscoreSummary.TVBroadcasts = tvBroadcasts
 			boxscoreSummary.WHStatus = int(whStatus)
 
 			break
@@ -642,14 +762,25 @@ func (c client) GetBoxscoreSummary(ctx context.Context, gameID string, outputWri
 		case "GameInfo":
 			break
 		case "LineScore":
+			for _, rowSet := range resultSet.RowSet {
+				teamID, err := parseRowSetValue[int](headersMap, rowSet, "TEAM_ID")
+				if err != nil {
+					return BoxscoreSummary{}, fmt.Errorf("failed to parse teamID from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
+				}
+
+				points, err := parseRowSetValue[int](headersMap, rowSet, "PTS")
+				if err != nil {
+					return BoxscoreSummary{}, fmt.Errorf("failed to parse points from nba stats %s endpoint: %w", endpointNameBoxscoreSummary, err)
+				}
+
+				boxscoreSummary.LineScores = append(boxscoreSummary.LineScores, BoxscoreSummaryLineScore{
+					TeamID: teamID,
+					Points: points,
+				})
+			}
 			break
 		}
 
-	}
-	for _, outputWriter := range outputWriters {
-		if err := outputWriter.Put(ctx, respBody); err != nil {
-			return BoxscoreSummary{}, fmt.Errorf("failed to write output for boxscore summary for game: %w", err)
-		}
 	}
 
 	return boxscoreSummary, nil

@@ -56,7 +56,7 @@ func (h *handler) List(w http.ResponseWriter, r *http.Request) {
 
 	games, err := h.gameService.List(ctx)
 	if err != nil {
-		h.logger.Error("failed to get games", slog.Any("error", err))
+		h.logger.ErrorContext(ctx, "failed to get games", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -78,7 +78,7 @@ func (h *handler) UpdateGames(w http.ResponseWriter, r *http.Request) {
 
 	games, err := h.gameService.UpdateSeasonGames(ctx, logger, seasonStartYear)
 	if err != nil {
-		logger.Error("could not update games", slog.Any("error", err))
+		logger.ErrorContext(ctx, "could not update games", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
@@ -107,7 +107,7 @@ func (h *handler) UpdateGame(w http.ResponseWriter, r *http.Request) {
 
 	games, err := h.gameService.UpdateGame(ctx, logger, gameID, seasonStartYear)
 	if err != nil {
-		logger.Error("could not update game", slog.Any("error", err))
+		logger.ErrorContext(ctx, "could not update game", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}

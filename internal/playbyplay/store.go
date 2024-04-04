@@ -11,4 +11,10 @@ type PlayByPlayWriter interface {
 }
 
 type PlayByPlayUpdate struct {
+	NBAGameID            string
+	NBATeamID            string
+	NBAPlayerID          int
+	SecondaryNBAPlayerID *int
+	Period               int
+	ActionNumber         int
 }

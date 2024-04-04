@@ -4,32 +4,40 @@ import (
 	"time"
 )
 
+type GameStatus int
+
+const (
+	GameStatusScheduled GameStatus = 1
+	GameStatusStarted   GameStatus = 2
+	GameStatusCompleted GameStatus = 3
+)
+
 type Game struct {
-	GameID           string    `json:"gameId"`
-	GameCode         string    `json:"gameCode"`
-	GameStatus       int       `json:"gameStatus"`
-	GameStatusText   string    `json:"gameStatusText"`
-	GameSequence     int       `json:"gameSequence"`
-	GameDateEst      time.Time `json:"gameDateEst"`
-	GameTimeEst      time.Time `json:"gameTimeEst"`
-	GameDateTimeEst  time.Time `json:"gameDateTimeEst"`
-	GameDateUTC      time.Time `json:"gameDateUTC"`
-	GameTimeUTC      time.Time `json:"gameTimeUTC"`
-	GameDateTimeUTC  time.Time `json:"gameDateTimeUTC"`
-	AwayTeamTime     time.Time `json:"awayTeamTime"`
-	HomeTeamTime     time.Time `json:"homeTeamTime"`
-	Day              string    `json:"day"`
-	MonthNum         int       `json:"monthNum"`
-	WeekNumber       int       `json:"weekNumber"`
-	WeekName         string    `json:"weekName"`
-	IfNecessary      bool      `json:"ifNecessary"`
-	SeriesGameNumber string    `json:"seriesGameNumber"`
-	SeriesText       string    `json:"seriesText"`
-	ArenaName        string    `json:"arenaName"`
-	ArenaState       string    `json:"arenaState"`
-	ArenaCity        string    `json:"arenaCity"`
-	PostponedStatus  string    `json:"postponedStatus"`
-	BranchLink       string    `json:"branchLink"`
+	GameID           string     `json:"gameId"`
+	GameCode         string     `json:"gameCode"`
+	GameStatus       GameStatus `json:"gameStatus"`
+	GameStatusText   string     `json:"gameStatusText"`
+	GameSequence     int        `json:"gameSequence"`
+	GameDateEst      time.Time  `json:"gameDateEst"`
+	GameTimeEst      time.Time  `json:"gameTimeEst"`
+	GameDateTimeEst  time.Time  `json:"gameDateTimeEst"`
+	GameDateUTC      time.Time  `json:"gameDateUTC"`
+	GameTimeUTC      time.Time  `json:"gameTimeUTC"`
+	GameDateTimeUTC  time.Time  `json:"gameDateTimeUTC"`
+	AwayTeamTime     time.Time  `json:"awayTeamTime"`
+	HomeTeamTime     time.Time  `json:"homeTeamTime"`
+	Day              string     `json:"day"`
+	MonthNum         int        `json:"monthNum"`
+	WeekNumber       int        `json:"weekNumber"`
+	WeekName         string     `json:"weekName"`
+	IfNecessary      bool       `json:"ifNecessary"`
+	SeriesGameNumber string     `json:"seriesGameNumber"`
+	SeriesText       string     `json:"seriesText"` // ex. "Preseason"
+	ArenaName        string     `json:"arenaName"`
+	ArenaState       string     `json:"arenaState"`
+	ArenaCity        string     `json:"arenaCity"`
+	PostponedStatus  string     `json:"postponedStatus"`
+	BranchLink       string     `json:"branchLink"`
 	Broadcasters     struct {
 		NationalTvBroadcasters []struct {
 			BroadcasterScope        string `json:"broadcasterScope"`

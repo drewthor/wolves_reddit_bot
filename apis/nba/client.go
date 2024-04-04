@@ -1,44 +1,40 @@
 package nba
 
 import (
-	"context"
-	"net"
 	"net/http"
 	"time"
+
+	"github.com/drewthor/wolves_reddit_bot/pkg/rlhttp"
+	"golang.org/x/time/rate"
 )
 
-type Client interface {
-	PlayByPlayForGame(ctx context.Context, gameID string, outputWriters ...OutputWriter) (PlayByPlay, error)
-	GetCommonTeamInfo(ctx context.Context, leagueID string, teamID int) (TeamCommonInfo, error)
-	GetBoxscoreSummary(ctx context.Context, gameID string, outputWriters ...OutputWriter) (BoxscoreSummary, error)
+type Client struct {
+	client      *rlhttp.Client
+	statsClient *rlhttp.Client
+	Cache       ObjectCacher
 }
 
-type client struct {
-	client      *http.Client
-	statsClient *http.Client
-}
+func NewClient(cache ObjectCacher, options ...rlhttp.ClientOption) Client {
+	cOptions := options
+	cOptions = append(cOptions, rlhttp.WithMaxRetries(2))
+	cOptions = append(cOptions, rlhttp.WithDefaultRetryWaitMax(2*time.Second))
+	cOptions = append(cOptions, rlhttp.WithRequestTimeout(5*time.Second))
 
-func NewClient() Client {
-	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 10 * time.Second}
-	c := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			DialContext:           dialer.DialContext,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
-		},
-	}
-	statsC := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: nbaRoundTripper{
-			r: &http.Transport{
-				DialContext:           dialer.DialContext,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ResponseHeaderTimeout: 10 * time.Second,
-			},
-		},
-	}
-	return &client{client: c, statsClient: statsC}
+	c := rlhttp.NewClient(cOptions...)
+
+	limiter := rate.NewLimiter(rate.Every(time.Second), 3)
+	statsOptions := options
+	statsOptions = append(statsOptions, rlhttp.WithMaxRetries(2))
+	statsOptions = append(statsOptions, rlhttp.WithDefaultRetryWaitMax(2*time.Second))
+	statsOptions = append(statsOptions, rlhttp.WithRequestTimeout(5*time.Second))
+	statsOptions = append(statsOptions, rlhttp.WithTransport(nbaRoundTripper{r: &http.Transport{
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+	}}))
+	statsOptions = append(statsOptions, rlhttp.WithRateLimiter(limiter))
+	statsC := rlhttp.NewClient(statsOptions...)
+
+	return Client{client: c, statsClient: statsC, Cache: cache}
 }
 
 type nbaRoundTripper struct {

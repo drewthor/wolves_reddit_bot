@@ -1,4 +1,4 @@
-package sentrymiddleware
+package slogmiddleware
 
 import (
 	"context"
@@ -29,10 +29,15 @@ type SentrySlogHandler struct {
 }
 
 func (h SentrySlogHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return slices.Contains(h.levels, level)
+	return slices.Contains(h.levels, level) || h.handler.Enabled(ctx, level)
 }
 
 func (h SentrySlogHandler) Handle(ctx context.Context, record slog.Record) error {
+	defer h.handler.Handle(ctx, record)
+
+	if !slices.Contains(h.levels, record.Level) {
+		return nil
+	}
 	exception := fmt.Errorf(record.Message)
 	attrs := make(map[string]string)
 	record.Attrs(func(attr slog.Attr) bool {
@@ -56,7 +61,7 @@ func (h SentrySlogHandler) Handle(ctx context.Context, record slog.Record) error
 		sentry.CaptureException(exception)
 	})
 
-	return h.handler.Handle(ctx, record)
+	return nil
 }
 
 func (h SentrySlogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

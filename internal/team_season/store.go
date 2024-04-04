@@ -12,9 +12,11 @@ type Store interface {
 }
 
 type TeamSeasonUpdate struct {
-	TeamID          string
-	LeagueName      string
+	NBATeamID       int
+	NBALeagueID     string
 	SeasonStartYear int
 	ConferenceName  string
 	DivisionName    string
+	Name            string
+	City            string
 }

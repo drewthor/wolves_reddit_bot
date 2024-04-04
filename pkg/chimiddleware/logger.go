@@ -66,7 +66,7 @@ func (l *StructuredLoggerEntry) Write(status, bytes int, header http.Header, ela
 
 func (l *StructuredLoggerEntry) Panic(v interface{}, stack []byte) {
 	// TODO: should this not be a default context?
-	l.Logger.LogAttrs(context.Background(), slog.LevelInfo, "",
+	l.Logger.LogAttrs(context.Background(), slog.LevelError, "",
 		slog.String("stack", string(stack)),
 		slog.String("panic", fmt.Sprintf("%+v", v)),
 	)

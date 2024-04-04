@@ -21,7 +21,7 @@ type TeamUpdate struct {
 	Nickname      string
 	City          string
 	AlternateCity *string
-	NBAURLName    string
-	NBAShortName  string
+	NBAURLName    *string
+	NBAShortName  *string
 	NBATeamID     int
 }

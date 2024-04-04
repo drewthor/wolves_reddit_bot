@@ -2,13 +2,12 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
 	"github.com/drewthor/wolves_reddit_bot/internal/game"
 	"github.com/drewthor/wolves_reddit_bot/internal/season"
-	"github.com/drewthor/wolves_reddit_bot/util"
 	"go.opentelemetry.io/otel"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/nba"
@@ -27,10 +26,10 @@ type service struct {
 	gameService   game.Service
 	seasonService season.Service
 
-	r2Client cloudflare.Client
+	nbaClient nba.Client
 }
 
-func NewService(gameService game.Service, seasonService season.Service, r2Client cloudflare.Client) Service {
+func NewService(gameService game.Service, seasonService season.Service, nbaClient nba.Client) Service {
 	scheduler := gocron.NewScheduler(time.UTC)
 
 	scheduler.TagsUnique()
@@ -39,7 +38,7 @@ func NewService(gameService game.Service, seasonService season.Service, r2Client
 		scheduler:     scheduler,
 		gameService:   gameService,
 		seasonService: seasonService,
-		r2Client:      r2Client,
+		nbaClient:     nbaClient,
 	}
 }
 
@@ -60,7 +59,7 @@ func (s *service) updateSeasonWeeks(logger *slog.Logger) {
 
 	_, err := s.seasonService.UpdateSeasonWeeks(ctx)
 	if err != nil {
-		logger.Error("failed to update season weeks during scheduled job", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to update season weeks during scheduled job", slog.Any("error", err))
 	}
 }
 
@@ -69,14 +68,23 @@ func (s *service) getTodaysGamesAndAddToJobs(logger *slog.Logger) {
 	ctx, span := otel.Tracer("scheduler").Start(ctx, "scheduler.service.getTodaysGamesAndAddToJobs")
 	defer span.End()
 
-	todaysScoreboard, err := nba.GetTodaysScoreboard(ctx, s.r2Client, util.NBAR2Bucket)
+	t := time.Now().UTC().Round(time.Hour).Format(time.RFC3339)
+	objectKey := fmt.Sprintf("scoreboard/%s_cdn.json", t)
+
+	todaysScoreboard, err := s.nbaClient.GetTodaysScoreboard(ctx, objectKey)
 	if err != nil {
-		logger.Error("failed to get new todays scoreboard to add games to jobs", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to get new todays scoreboard to add games to jobs", slog.Any("error", err))
 	}
 
 	uniqueGameIDStartTimeUTCMap := map[string]time.Time{}
 	for _, g := range todaysScoreboard.Scoreboard.Games {
 		uniqueGameIDStartTimeUTCMap[g.GameID] = g.GameTimeUTC
+	}
+
+	seasonStartYear, err := s.seasonService.GetCurrentSeasonStartYear(ctx)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to get game current season start year when getting todays games", slog.Any("error", err))
+		return
 	}
 
 	for gameID, startTimeUTC := range uniqueGameIDStartTimeUTCMap {
@@ -100,12 +108,15 @@ func (s *service) getTodaysGamesAndAddToJobs(logger *slog.Logger) {
 			slog.Warn("jobs found for gameID but creating as if new", slog.Any("error", err), slog.Int("num_jobs", len(jobs)))
 		}
 
-		slog.Info("creating job", slog.String("gameID", gameID))
+		// job does not exist so update the game and create it
+		if _, err := s.gameService.UpdateGame(ctx, logger, gameID, seasonStartYear); err != nil {
+			logger.ErrorContext(ctx, "failed to update game via getTodaysGamesAndAddToJobs", slog.Int("season_start_year", seasonStartYear), slog.Any("error", err))
+			return
+		}
 
-		// job does not exist so create it
 		_, err = s.scheduler.Every(30).Seconds().StartAt(startTimeUTC).Tag(tag).Do(s.updateGame, logger, gameID)
 		if err != nil {
-			logger.Error("error scheduling job to get game data", slog.Any("error", err))
+			logger.ErrorContext(ctx, "error scheduling job to get game data", slog.Any("error", err))
 		}
 	}
 }
@@ -124,13 +135,13 @@ func (s *service) updateGame(logger *slog.Logger, gameID string) {
 
 	seasonStartYear, err := s.seasonService.GetCurrentSeasonStartYear(ctx)
 	if err != nil {
-		logger.Error("failed to get game current season start year when updating game", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to get game current season start year when updating game", slog.Any("error", err))
 		return
 	}
 
 	g, err := s.gameService.UpdateGame(ctx, logger, gameID, seasonStartYear)
 	if err != nil {
-		logger.Error("failed to update game via updateGame", slog.Int("season_start_year", seasonStartYear))
+		logger.ErrorContext(ctx, "failed to update game via updateGame", slog.Int("season_start_year", seasonStartYear), slog.Any("error", err))
 		return
 	}
 

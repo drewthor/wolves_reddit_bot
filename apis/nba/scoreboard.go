@@ -1,12 +1,18 @@
 package nba
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"os"
+	"io"
+	"net/http"
+	"slices"
 	"time"
 
-	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/hashicorp/go-retryablehttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const todaysScoreboardURL = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
@@ -39,6 +45,26 @@ type TodaysScoreboard struct {
 	Scoreboard ScoreboardDetailed `json:"scoreboard"`
 }
 
+type SeriesText string
+
+const (
+	SeriesTextEmpty               SeriesText = "" // "" - this is probably just always regular season
+	SeriesTextISTChampionship     SeriesText = "Championship"
+	SeriesTextISTEastGroupA       SeriesText = "East Group A"         // In season tournament
+	SeriesTextISTEastGroupB       SeriesText = "East Group B"         // In season tournament
+	SeriesTextISTEastGroupC       SeriesText = "East Group C"         // In season tournament
+	SeriesTextISTEastQuarterFinal SeriesText = "East Quarterfinal"    // In season tournament
+	SeriesTextISTEastSemiFinal    SeriesText = "East Semifinal"       // In season tournament
+	SeriesTextMexicoCityGame      SeriesText = "NBA Mexico City Game" // Regular season
+	SeriesTextParisGame           SeriesText = "NBA Paris Game"       // Regular season
+	SeriesTextPreseason           SeriesText = "Preseason"
+	SeriesTextISTWestGroupA       SeriesText = "West Group A"      // In season tournament
+	SeriesTextISTWestGroupB       SeriesText = "West Group B"      // In season tournament
+	SeriesTextISTWestGroupC       SeriesText = "West Group C"      // In season tournament
+	SeriesTextISTWestQuarterFinal SeriesText = "West Quarterfinal" // In season tournament
+	SeriesTextISTWestSemiFinal    SeriesText = "West Semifinal"    // In season tournament
+)
+
 type ScoreboardDetailed struct {
 	GameDate   string `json:"gameDate"`   // ex. 2021-11-08
 	LeagueID   string `json:"leagueId"`   // ex. 00 for NBA, 15 for Las Vegas, 13 for California classical, 16 for Utah, and 14 for Orlando
@@ -55,7 +81,7 @@ type ScoreboardDetailed struct {
 		RegulationPeriods int            `json:"regulationPeriods"`
 		IfNecessary       bool           `json:"ifNecessary"`
 		SeriesGameNumber  string         `json:"seriesGameNumber"`
-		SeriesText        string         `json:"seriesText"`
+		SeriesText        SeriesText     `json:"seriesText"`
 		HomeTeam          TeamScoreboard `json:"homeTeam"`
 		AwayTeam          TeamScoreboard `json:"awayTeam"`
 	} `json:"games"`
@@ -95,16 +121,55 @@ type ScoreboardTeamLeaders struct {
 	Assists      int     `json:"assists"`
 }
 
-func GetTodaysScoreboard(ctx context.Context, r2Client cloudflare.Client, bucket string) (TodaysScoreboard, error) {
-	t := time.Now().UTC().Round(time.Hour).Format(time.RFC3339)
-	filePath := os.Getenv("STORAGE_PATH") + fmt.Sprintf("/scoreboard/%s", t)
+func (c Client) GetTodaysScoreboard(ctx context.Context, objectKey string) (TodaysScoreboard, error) {
+	ctx, span := otel.Tracer("nba").Start(ctx, "nba.Client.GetTodaysScoreboard")
+	defer span.End()
 
-	objectKey := fmt.Sprintf("scoreboard/%s_cdn.json", t)
-
-	todaysScoreboard, err := fetchObjectAndSaveToFile[TodaysScoreboard](ctx, r2Client, todaysScoreboardURL, filePath, bucket, objectKey)
+	req, err := retryablehttp.NewRequest(http.MethodGet, todaysScoreboardURL, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return TodaysScoreboard{}, fmt.Errorf("failed to create request to get todays scoreboard: %w", err)
+	}
+
+	response, err := c.client.Do(req)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return TodaysScoreboard{}, fmt.Errorf("failed to get TodaysScoreboard object: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != 200 {
+		err = fmt.Errorf("failed to successfully get TodaysScoreboard object")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		if slices.Contains([]int{http.StatusNotFound, http.StatusForbidden}, response.StatusCode) {
+			return TodaysScoreboard{}, ErrNotFound
+		}
 		return TodaysScoreboard{}, err
 	}
 
-	return todaysScoreboard, nil
+	var respBody []byte
+	respBody, err = io.ReadAll(response.Body)
+	if err != nil {
+		span.RecordError(err)
+	}
+
+	if c.Cache != nil {
+		if err := c.Cache.PutObject(ctx, objectKey, bytes.NewReader(respBody)); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return TodaysScoreboard{}, fmt.Errorf("failed to cache todays scoreboard object: %w", err)
+		}
+	}
+
+	var scoreboard TodaysScoreboard
+	if err := json.Unmarshal(respBody, &scoreboard); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return TodaysScoreboard{}, fmt.Errorf("failed to unmarshal league schedule json: %w", err)
+	}
+
+	return scoreboard, nil
 }

@@ -39,16 +39,16 @@ func (l *Logger) Log(ctx context.Context, level tracelog.LogLevel, msg string, d
 
 	switch level {
 	case tracelog.LogLevelTrace:
-		logger.Log(context.Background(), slog.LevelDebug-1, msg, "PGX_LOG_LEVEL", level)
+		logger.Log(ctx, slog.LevelDebug-1, msg, "PGX_LOG_LEVEL", level)
 	case tracelog.LogLevelDebug:
-		logger.Debug(msg)
+		logger.DebugContext(ctx, msg)
 	case tracelog.LogLevelInfo:
-		logger.Info(msg)
+		logger.InfoContext(ctx, msg)
 	case tracelog.LogLevelWarn:
-		logger.Warn(msg)
+		logger.WarnContext(ctx, msg)
 	case tracelog.LogLevelError:
-		logger.Error(msg)
+		logger.ErrorContext(ctx, msg)
 	default:
-		logger.Error(msg, slog.Any(l.errorKey, fmt.Errorf("invalid pgx log level: %d", level)))
+		logger.ErrorContext(ctx, msg, slog.Any(l.errorKey, fmt.Errorf("invalid pgx log level: %d", level)))
 	}
 }

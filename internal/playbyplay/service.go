@@ -2,6 +2,7 @@ package playbyplay
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -32,11 +33,26 @@ func (s service) FetchPlayByPlayForGame(ctx context.Context, logger *slog.Logger
 	ctx, span := otel.Tracer("playbyplay").Start(ctx, "playbyplay.service.FetchPlayByPlayForGame")
 	defer span.End()
 
-	//filepath := fmt.Sprintf(os.Getenv("STORAGE_PATH")+"/playbyplay/%s.json", gameID)
 	objectKey := fmt.Sprintf("playbyplay/%s.json", gameID)
 	playByPlay, err := s.nbaClient.PlayByPlayForGame(ctx, gameID, util.WithR2OutputWriter(logger, s.r2Client, util.NBAR2Bucket, objectKey))
 	if err != nil {
+		if errors.Is(err, nba.ErrNotFound) {
+			return nba.PlayByPlay{}, util.ErrNotFound
+		}
 		return nba.PlayByPlay{}, fmt.Errorf("failed to get play by play for game: %w", err)
+	}
+
+	return playByPlay, nil
+}
+
+func (s service) FetchPlayByPlayForGameV3(ctx context.Context, logger *slog.Logger, gameID string) (nba.PlayByPlayV3, error) {
+	ctx, span := otel.Tracer("playbyplay").Start(ctx, "playbyplay.service.FetchPlayByPlayForGameV3")
+	defer span.End()
+
+	objectKey := fmt.Sprintf("playbyplayv3/%s.json", gameID)
+	playByPlay, err := s.nbaClient.PlayByPlayV3ForGame(ctx, gameID, util.WithR2OutputWriter(logger, s.r2Client, util.NBAR2Bucket, objectKey))
+	if err != nil {
+		return nba.PlayByPlayV3{}, fmt.Errorf("failed to get play by play v3 for game: %w", err)
 	}
 
 	return playByPlay, nil
@@ -49,14 +65,26 @@ func (s service) UpdatePlayByPlayForGames(ctx context.Context, logger *slog.Logg
 	var playByPlayUpdates []PlayByPlayUpdate
 
 	for _, nbaGameID := range nbaGameIDs {
-		_, err := s.FetchPlayByPlayForGame(ctx, logger, nbaGameID)
-		if err != nil {
+		pbp, err := s.FetchPlayByPlayForGame(ctx, logger, nbaGameID)
+		if err != nil && !errors.Is(err, util.ErrNotFound) {
 			return nil, fmt.Errorf("failed to fetch playbyplay for game: %w", err)
 		}
+		_, err = s.FetchPlayByPlayForGameV3(ctx, logger, nbaGameID)
+		if err != nil && !errors.Is(err, util.ErrNotFound) {
+			return nil, fmt.Errorf("failed to fetch playbyplayv3 for game: %w", err)
+		}
 
-		update := PlayByPlayUpdate{}
+		for _, action := range pbp.Game.Actions {
+			update := PlayByPlayUpdate{
+				NBAGameID:    nbaGameID,
+				NBATeamID:    pbp.Game.GameID,
+				NBAPlayerID:  action.PersonID,
+				Period:       action.Period,
+				ActionNumber: action.ActionNumber,
+			}
 
-		playByPlayUpdates = append(playByPlayUpdates, update)
+			playByPlayUpdates = append(playByPlayUpdates, update)
+		}
 	}
 
 	return s.playByPlayStore.UpdatePlayByPlays(ctx, playByPlayUpdates)

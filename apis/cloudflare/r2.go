@@ -26,8 +26,9 @@ func (c Client) CreateBucket(ctx context.Context, bucket string) error {
 	return nil
 }
 
-// CreateObject creates an object with key objectKey in the R2 bucket
-func (c Client) CreateObject(ctx context.Context, bucket, objectKey string, contentType string, objReader io.Reader) error {
+// PutObject creates an object with key objectKey in the R2 bucket
+func (c Client) PutObject(ctx context.Context, bucket, objectKey string, contentType string, objReader io.Reader) error {
+	ctx = context.WithoutCancel(ctx)
 	_, err := c.client.PutObject(ctx, &s3.PutObjectInput{Bucket: &bucket, Key: &objectKey, ContentType: &contentType, Body: objReader})
 	if err != nil {
 		return fmt.Errorf("failed to create request to create r2 object: %w", err)
@@ -36,7 +37,7 @@ func (c Client) CreateObject(ctx context.Context, bucket, objectKey string, cont
 	return nil
 }
 
-// CreateObject gets an object with key objectKey from the R2 bucket and returns it
+// PutObject gets an object with key objectKey from the R2 bucket and returns it
 func (c Client) GetObject(ctx context.Context, bucket, objectKey string) ([]byte, error) {
 	output, err := c.client.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &objectKey})
 	if err != nil {

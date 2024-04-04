@@ -11,7 +11,7 @@ create table team
     city_alternate text,
     state          text,
     country        text,
-    franchise_id   uuid                                               references franchise (id),
+    franchise_id   uuid                                               references franchise (id) not null,
     nba_url_name   text                                               not null,
     nba_short_name text                                               not null,
     nba_team_id    integer                                            not null unique

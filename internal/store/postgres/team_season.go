@@ -58,42 +58,57 @@ func (d DB) UpdateTeamSeasons(ctx context.Context, teamSeasonUpdates []team_seas
 
 	insertQuery := `
 		INSERT INTO nba.team_season
-			AS ts(team_id, league_id, season_id, conference_id, division_id)
-		VALUES ($1, (SELECT id FROM nba.league WHERE name = $2), (SELECT id FROM nba.season WHERE start_year = $3), (SELECT id FROM nba.conference WHERE name = $4), (SELECT id FROM nba.division WHERE name = $5))
+			(team_id, league_id, season_id, conference_id, division_id, name, city)
+		VALUES ((SELECT id FROM nba.team WHERE nba_team_id = $1), (SELECT id FROM nba.league WHERE nba_league_id = $2), (SELECT id FROM nba.season WHERE start_year = $3), (SELECT id FROM nba.conference WHERE name = $4), (SELECT id FROM nba.division WHERE name = $5), $6, $7)
 		ON CONFLICT (team_id, league_id, season_id) DO UPDATE
 		SET
-			team_id = coalesce(excluded.team_id, ts.team_id),
-			league_id = coalesce(excluded.league_id, ts.league_id),
-			season_id = coalesce(excluded.season_id, ts.season_id),
-			conference_id = coalesce(excluded.conference_id, ts.conference_id),
-			division_id = coalesce(excluded.division_id, ts.division_id)
-		RETURNING ts.id`
+			team_id = coalesce(excluded.team_id, nba.team_season.team_id),
+			league_id = coalesce(excluded.league_id, nba.team_season.league_id),
+			season_id = coalesce(excluded.season_id, nba.team_season.season_id),
+			conference_id = coalesce(excluded.conference_id, nba.team_season.conference_id),
+			division_id = coalesce(excluded.division_id, nba.team_season.division_id),
+			name = coalesce(excluded.name, nba.team_season.name),
+			city = coalesce(excluded.city, nba.team_season.city)
+		RETURNING nba.team_season.*`
 
 	b := &pgx.Batch{}
 
 	for _, teamSeasonUpdate := range teamSeasonUpdates {
 		b.Queue(
 			insertQuery,
-			teamSeasonUpdate.TeamID,
-			teamSeasonUpdate.LeagueName,
+			teamSeasonUpdate.NBATeamID,
+			teamSeasonUpdate.NBALeagueID,
 			teamSeasonUpdate.SeasonStartYear,
 			teamSeasonUpdate.ConferenceName,
-			teamSeasonUpdate.DivisionName)
+			teamSeasonUpdate.DivisionName,
+			teamSeasonUpdate.Name,
+			teamSeasonUpdate.City,
+		)
 	}
 
 	batchResults := tx.SendBatch(ctx, b)
 
-	insertedTeamSeasonIDs := []string{}
-
+	var updatedTeamSeasons []api.TeamSeason
 	for _ = range teamSeasonUpdates {
-		id := ""
-		err := batchResults.QueryRow().Scan(&id)
+		var teamSeason api.TeamSeason
+		err := batchResults.QueryRow().Scan(
+			&teamSeason.ID,
+			&teamSeason.TeamID,
+			&teamSeason.SeasonID,
+			&teamSeason.LeagueID,
+			&teamSeason.ConferenceID,
+			&teamSeason.DivisionID,
+			&teamSeason.CreatedAt,
+			&teamSeason.UpdatedAt,
+			&teamSeason.City,
+			&teamSeason.Name,
+		)
 		if err != nil {
 			batchResults.Close()
 			return nil, err
 		}
 
-		insertedTeamSeasonIDs = append(insertedTeamSeasonIDs, id)
+		updatedTeamSeasons = append(updatedTeamSeasons, teamSeason)
 	}
 
 	err = batchResults.Close()
@@ -106,5 +121,5 @@ func (d DB) UpdateTeamSeasons(ctx context.Context, teamSeasonUpdates []team_seas
 		return nil, err
 	}
 
-	return d.GetTeamSeasonsWithIDs(ctx, insertedTeamSeasonIDs)
+	return updatedTeamSeasons, nil
 }

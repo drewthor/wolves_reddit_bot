@@ -12,11 +12,11 @@ type Game struct {
 	AwayTeamPoints      *int       `json:"away_team_points"`
 	Status              string     `json:"status"`
 	ArenaID             *string    `json:"arena_id"`
-	Attendance          int        `json:"attendance"`
+	Attendance          *int       `json:"attendance"`
 	Season              string     `json:"season"`
 	SeasonStage         string     `json:"season_stage"`
-	Period              int        `json:"period"`
-	PeriodTimeRemaining int        `json:"period_time_remaining"`
+	Period              *int       `json:"period"`
+	PeriodTimeRemaining *int       `json:"period_time_remaining"`
 	Duration            *int       `json:"duration"`
 	StartTime           time.Time  `json:"start_time"`
 	EndTime             *time.Time `json:"end_time"`

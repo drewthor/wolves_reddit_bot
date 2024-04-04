@@ -9,23 +9,49 @@ import (
 	"path/filepath"
 
 	"github.com/drewthor/wolves_reddit_bot/apis/cloudflare"
+	"github.com/drewthor/wolves_reddit_bot/apis/nba"
 )
 
-func NBASeasonStageNameMappings() map[int]string {
-	return map[int]string{
-		1: "pre",
-		2: "regular",
-		3: "allstar",
-		4: "post",
-		5: "playin",
+type SeasonStage string
+
+const (
+	SeasonStagePre     SeasonStage = "pre"
+	SeasonStageRegular SeasonStage = "regular"
+	SeasonStageAllStar SeasonStage = "allstar"
+	SeasonStagePost    SeasonStage = "post"
+	SeasonStagePlayIn  SeasonStage = "playin"
+)
+
+func NBASeasonTypeToInternal(nbaSeasonType nba.SeasonType) SeasonStage {
+	switch nbaSeasonType {
+	case nba.SeasonTypePre:
+		return SeasonStagePre
+	case nba.SeasonTypeRegular:
+		return SeasonStageRegular
+	case nba.SeasonTypeAllStar:
+		return SeasonStageAllStar
+	case nba.SeasonTypePlayoffs:
+		return SeasonStagePost
+	default:
+		return SeasonStageRegular
 	}
 }
 
-func NBAGameStatusNameMappings() map[int]string {
-	return map[int]string{
-		1: "scheduled",
-		2: "started",
-		3: "completed",
+func NBASeasonStageNameMappings() map[int]SeasonStage {
+	return map[int]SeasonStage{
+		1: SeasonStagePre,
+		2: SeasonStageRegular,
+		3: SeasonStageAllStar,
+		4: SeasonStagePost,
+		5: SeasonStagePlayIn,
+	}
+}
+
+func NBAGameStatusNameMappings() map[nba.GameStatus]string {
+	return map[nba.GameStatus]string{
+		nba.GameStatusScheduled: "scheduled",
+		nba.GameStatusStarted:   "started",
+		nba.GameStatusCompleted: "completed",
 	}
 }
 
@@ -33,7 +59,7 @@ func WithFileOutputWriter(logger *slog.Logger, filepath string) FileOutputWriter
 	return FileOutputWriter{logger: logger, filepath: filepath}
 }
 
-//var _ nba.OutputWriter = FileOutputWriter{}
+// var _ nba.OutputWriter = FileOutputWriter{}
 
 type FileOutputWriter struct {
 	logger   *slog.Logger
@@ -76,7 +102,7 @@ func WithR2OutputWriter(
 	}
 }
 
-//var _ nba.OutputWriter = R2OutputWriter{}
+// var _ nba.OutputWriter = R2OutputWriter{}
 
 type R2OutputWriter struct {
 	logger    *slog.Logger
@@ -86,8 +112,9 @@ type R2OutputWriter struct {
 }
 
 func (r R2OutputWriter) Put(ctx context.Context, b []byte) error {
-	if err := r.r2Client.CreateObject(ctx, r.bucket, r.objectKey, ContentTypeJSON, bytes.NewReader(b)); err != nil {
-		r.logger.Error("failed to write object to r2 bucket", slog.String("bucket", r.bucket), slog.String("object_key", r.objectKey), slog.Any("error", err))
+	ctx = context.WithoutCancel(ctx)
+	if err := r.r2Client.PutObject(ctx, r.bucket, r.objectKey, ContentTypeJSON, bytes.NewReader(b)); err != nil {
+		r.logger.ErrorContext(ctx, "failed to write object to r2 bucket", slog.String("bucket", r.bucket), slog.String("object_key", r.objectKey), slog.Any("error", err))
 	}
 
 	return nil

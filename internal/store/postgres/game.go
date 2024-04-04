@@ -240,9 +240,6 @@ func (d DB) UpdateGamesSummary(ctx context.Context, gameUpdates []game.GameSumma
 	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.UpdateGamesSummary")
 	defer span.End()
 
-	if len(gameUpdates) == 0 {
-		return nil, nil
-	}
 	tx, err := d.pgxPool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start db transaction to update games old with error: %w", err)
@@ -251,28 +248,27 @@ func (d DB) UpdateGamesSummary(ctx context.Context, gameUpdates []game.GameSumma
 
 	insertGame := `
 		INSERT INTO nba.game
-			as g(home_team_id, away_team_id, home_team_points, away_team_points, game_status_id, attendance, season_id, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id)
-		VALUES ((SELECT id FROM nba.Team WHERE nba_team_id = $1), (SELECT id FROM nba.Team WHERE nba_team_id = $2), $3, $4, (SELECT id FROM nba.game_status WHERE name = $5), $6, (SELECT id FROM nba.season WHERE start_year = $7), $8, $9, $10, $11, $12, $13)
+			(home_team_id, away_team_id, home_team_points, away_team_points, game_status_id, attendance, season_id, season_stage_id, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, nba_game_id)
+		VALUES ((SELECT id FROM nba.Team WHERE nba_team_id = $1), (SELECT id FROM nba.Team WHERE nba_team_id = $2), $3, $4, (SELECT id FROM nba.game_status WHERE name = $5), $6, (SELECT id FROM nba.season WHERE start_year = $7), (SELECT id FROM nba.season_stage WHERE name = $8), $9, $10, $11, $12, $13, $14)
 		ON CONFLICT (nba_game_id) DO UPDATE
 		SET 
-			home_team_id = coalesce(excluded.home_team_id, g.home_team_id),
-			away_team_id = coalesce(excluded.away_team_id, g.away_team_id),
-			home_team_points = coalesce(excluded.home_team_points, g.home_team_points),
-			away_team_points = coalesce(excluded.away_team_points, g.away_team_points),
-			game_status_id = coalesce(excluded.game_status_id, g.game_status_id),
-			attendance = coalesce(excluded.attendance, g.attendance),
-			season_id = coalesce(excluded.season_id, g.season_id),
-			period = coalesce(excluded.period, g.period),
-			period_time_remaining_tenth_seconds = coalesce(excluded.period_time_remaining_tenth_seconds, g.period_time_remaining_tenth_seconds),
-			duration_seconds = coalesce(excluded.duration_seconds, g.duration_seconds),
-			start_time = coalesce(excluded.start_time, g.start_time),
-			end_time = coalesce(excluded.end_time, g.end_time),
-			nba_game_id = coalesce(excluded.nba_game_id, g.nba_game_id)
-		RETURNING g.id`
+			home_team_id = coalesce(excluded.home_team_id, nba.game.home_team_id),
+			away_team_id = coalesce(excluded.away_team_id, nba.game.away_team_id),
+			home_team_points = coalesce(excluded.home_team_points, nba.game.home_team_points),
+			away_team_points = coalesce(excluded.away_team_points, nba.game.away_team_points),
+			game_status_id = coalesce(excluded.game_status_id, nba.game.game_status_id),
+			attendance = coalesce(excluded.attendance, nba.game.attendance),
+			season_id = coalesce(excluded.season_id, nba.game.season_id),
+			period = coalesce(excluded.period, nba.game.period),
+			period_time_remaining_tenth_seconds = coalesce(excluded.period_time_remaining_tenth_seconds, nba.game.period_time_remaining_tenth_seconds),
+			duration_seconds = coalesce(excluded.duration_seconds, nba.game.duration_seconds),
+			start_time = coalesce(excluded.start_time, nba.game.start_time),
+			end_time = coalesce(excluded.end_time, nba.game.end_time),
+			nba_game_id = coalesce(excluded.nba_game_id, nba.game.nba_game_id)
+		RETURNING nba.game.id`
 
 	bp := &pgx.Batch{}
 
-	insertedGameIDs := []string{}
 	for _, gameUpdate := range gameUpdates {
 		bp.Queue(insertGame,
 			gameUpdate.NBAHomeTeamID,
@@ -282,22 +278,29 @@ func (d DB) UpdateGamesSummary(ctx context.Context, gameUpdates []game.GameSumma
 			gameUpdate.GameStatusName,
 			gameUpdate.Attendance,
 			gameUpdate.SeasonStartYear,
+			gameUpdate.SeasonStageName,
 			gameUpdate.Period,
 			gameUpdate.PeriodTimeRemainingTenthSeconds,
 			gameUpdate.DurationSeconds,
 			gameUpdate.StartTime,
 			gameUpdate.EndTime,
-			gameUpdate.NBAGameID).QueryRow(func(row pgx.Row) error {
-			id := ""
-			if err := row.Scan(&id); err != nil {
-				return err
-			}
-			insertedGameIDs = append(insertedGameIDs, id)
-			return nil
-		})
+			gameUpdate.NBAGameID)
 	}
 
 	batchResults := tx.SendBatch(ctx, bp)
+
+	var insertedGameIDs []string
+
+	for _, _ = range gameUpdates {
+		id := ""
+		err := batchResults.QueryRow().Scan(&id)
+		if err != nil {
+			batchResults.Close()
+			return nil, err
+		}
+
+		insertedGameIDs = append(insertedGameIDs, id)
+	}
 
 	err = batchResults.Close()
 	if err != nil {
@@ -324,17 +327,17 @@ func (d DB) UpdateGames(ctx context.Context, gameUpdates []game.GameUpdate) ([]a
 
 	insertGame := `
 		INSERT INTO nba.game
-			as g(home_team_id, away_team_id, home_team_points, away_team_points, game_status_id, arena_id, attendance, season_id, season_stage_id, sellout, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, regulation_periods, nba_game_id)
-		SELECT
-			( SELECT id FROM nba.team WHERE nba_team_id = $1 ) as home_team_id,
-			( SELECT id FROM nba.team WHERE nba_team_id = $2 ) as away_team_id,
+			(home_team_id, away_team_id, home_team_points, away_team_points, game_status_id, arena_id, attendance, season_id, season_stage_id, sellout, period, period_time_remaining_tenth_seconds, duration_seconds, start_time, end_time, regulation_periods, nba_game_id)
+		VALUES (
+			(SELECT id FROM nba.team WHERE nba_team_id = $1),
+			(SELECT id FROM nba.team WHERE nba_team_id = $2),
 		    $3,
 		    $4,
-			( SELECT id FROM nba.game_status WHERE name = $5 ) as game_status_id,
-			( SELECT id FROM nba.arena WHERE nba_arena_id = $6 ) as arena_id,
+			(SELECT id FROM nba.game_status WHERE name = $5),
+			(SELECT id FROM nba.arena WHERE nba_arena_id = $6),
 			$7,
-			( SELECT nba.season.id FROM nba.season JOIN nba.season_week ON nba.season.id = nba.season_week.season_id WHERE nba.season_week.start_date <= $8 AND nba.season_week.end_date > $8 ) as season_id,
-			( SELECT id FROM nba.season_stage WHERE name = 'regular' ) as season_stage_id,
+			(SELECT nba.season.id FROM nba.season WHERE nba.season.start_year = $8),
+			(SELECT id FROM nba.season_stage WHERE name = 'regular'),
 			$9,
 			$10,
 			$11,
@@ -343,26 +346,27 @@ func (d DB) UpdateGames(ctx context.Context, gameUpdates []game.GameUpdate) ([]a
 			$14,
 			$15,
 			$16
+		)
 		ON CONFLICT (nba_game_id) DO UPDATE
 		SET
-			home_team_id = coalesce(excluded.home_team_id, g.home_team_id),
-			away_team_id = coalesce(excluded.away_team_id, g.away_team_id),
-			home_team_points = coalesce(excluded.home_team_points, g.home_team_points),
-			away_team_points = coalesce(excluded.away_team_points, g.away_team_points),
-			game_status_id = coalesce(excluded.game_status_id, g.game_status_id),
-			arena_id = coalesce(excluded.arena_id, g.arena_id),
-			season_id = coalesce(excluded.season_id, g.season_id),
-			season_stage_id = coalesce(excluded.season_stage_id, g.season_stage_id),
-			attendance = coalesce(excluded.attendance, g.attendance),
-			sellout = coalesce(excluded.sellout, g.sellout),
-			period = coalesce(excluded.period, g.period),
-			period_time_remaining_tenth_seconds = coalesce(excluded.period_time_remaining_tenth_seconds, g.period_time_remaining_tenth_seconds),
-			duration_seconds = coalesce(excluded.duration_seconds, g.duration_seconds),
+			home_team_id = coalesce(excluded.home_team_id, nba.game.home_team_id),
+			away_team_id = coalesce(excluded.away_team_id, nba.game.away_team_id),
+			home_team_points = coalesce(excluded.home_team_points, nba.game.home_team_points),
+			away_team_points = coalesce(excluded.away_team_points, nba.game.away_team_points),
+			game_status_id = coalesce(excluded.game_status_id, nba.game.game_status_id),
+			arena_id = coalesce(excluded.arena_id, nba.game.arena_id),
+			season_id = coalesce(excluded.season_id, nba.game.season_id),
+			season_stage_id = coalesce(excluded.season_stage_id, nba.game.season_stage_id),
+			attendance = coalesce(excluded.attendance, nba.game.attendance),
+			sellout = coalesce(excluded.sellout, nba.game.sellout),
+			period = coalesce(excluded.period, nba.game.period),
+			period_time_remaining_tenth_seconds = coalesce(excluded.period_time_remaining_tenth_seconds, nba.game.period_time_remaining_tenth_seconds),
+			duration_seconds = coalesce(excluded.duration_seconds, nba.game.duration_seconds),
 			start_time = excluded.start_time,
-			end_time = coalesce(excluded.end_time, g.end_time),
-			regulation_periods = coalesce(excluded.regulation_periods, g.regulation_periods),
-			nba_game_id = coalesce(excluded.nba_game_id, g.nba_game_id)
-		RETURNING g.id`
+			end_time = coalesce(excluded.end_time, nba.game.end_time),
+			regulation_periods = coalesce(excluded.regulation_periods, nba.game.regulation_periods),
+			nba_game_id = coalesce(excluded.nba_game_id, nba.game.nba_game_id)
+		RETURNING nba.game.id`
 
 	bp := &pgx.Batch{}
 
@@ -375,7 +379,7 @@ func (d DB) UpdateGames(ctx context.Context, gameUpdates []game.GameUpdate) ([]a
 			gameUpdate.GameStatusName,
 			gameUpdate.NBAArenaID,
 			gameUpdate.Attendance,
-			gameUpdate.StartTime,
+			gameUpdate.SeasonStartYear,
 			gameUpdate.Sellout,
 			gameUpdate.Period,
 			gameUpdate.PeriodTimeRemainingTenthSeconds,
@@ -388,7 +392,89 @@ func (d DB) UpdateGames(ctx context.Context, gameUpdates []game.GameUpdate) ([]a
 
 	batchResults := tx.SendBatch(ctx, bp)
 
-	insertedGameIDs := []string{}
+	var insertedGameIDs []string
+
+	for _, _ = range gameUpdates {
+		id := ""
+		err := batchResults.QueryRow().Scan(&id)
+		if err != nil {
+			batchResults.Close()
+			return nil, err
+		}
+
+		insertedGameIDs = append(insertedGameIDs, id)
+	}
+
+	err = batchResults.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.GetGamesWithIDs(ctx, insertedGameIDs)
+}
+
+func (d DB) UpdateScheduledGames(ctx context.Context, gameUpdates []game.GameScheduledUpdate) ([]api.Game, error) {
+	ctx, span := otel.Tracer("postgres").Start(ctx, "postgres.DB.UpdateGames")
+	defer span.End()
+
+	tx, err := d.pgxPool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not start db transaction to update games with error: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	insertGame := `
+		INSERT INTO nba.game
+			(home_team_id, away_team_id, home_team_points, away_team_points, game_status_id, arena_id, season_id, season_stage_id, start_time, nba_game_id)
+		VALUES (
+			(SELECT id FROM nba.team WHERE nba_team_id = $1),
+			(SELECT id FROM nba.team WHERE nba_team_id = $2),
+		    $3,
+		    $4,
+			(SELECT id FROM nba.game_status WHERE name = $5),
+			(SELECT id FROM nba.arena WHERE name = $6),
+			(SELECT nba.season.id FROM nba.season WHERE nba.season.start_year = $7),
+			(SELECT id FROM nba.season_stage WHERE name = 'regular'),
+			$8,
+			$9
+		)
+		ON CONFLICT (nba_game_id) DO UPDATE
+		SET
+			home_team_id = coalesce(excluded.home_team_id, nba.game.home_team_id),
+			away_team_id = coalesce(excluded.away_team_id, nba.game.away_team_id),
+			home_team_points = coalesce(excluded.home_team_points, nba.game.home_team_points),
+			away_team_points = coalesce(excluded.away_team_points, nba.game.away_team_points),
+			game_status_id = coalesce(excluded.game_status_id, nba.game.game_status_id),
+			arena_id = coalesce(excluded.arena_id, nba.game.arena_id),
+			season_id = coalesce(excluded.season_id, nba.game.season_id),
+			season_stage_id = coalesce(excluded.season_stage_id, nba.game.season_stage_id),
+			start_time = excluded.start_time,
+			nba_game_id = coalesce(excluded.nba_game_id, nba.game.nba_game_id)
+		RETURNING nba.game.id`
+
+	bp := &pgx.Batch{}
+
+	for _, gameUpdate := range gameUpdates {
+		bp.Queue(insertGame,
+			gameUpdate.NBAHomeTeamID,
+			gameUpdate.NBAAwayTeamID,
+			gameUpdate.HomeTeamPoints,
+			gameUpdate.AwayTeamPoints,
+			gameUpdate.GameStatusName,
+			gameUpdate.NBAArenaName,
+			gameUpdate.SeasonStartYear,
+			gameUpdate.StartTime,
+			gameUpdate.NBAGameID)
+	}
+
+	batchResults := tx.SendBatch(ctx, bp)
+
+	var insertedGameIDs []string
 
 	for _, _ = range gameUpdates {
 		id := ""

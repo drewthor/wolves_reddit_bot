@@ -52,7 +52,7 @@ func (h *handler) Get(w http.ResponseWriter, r *http.Request) {
 
 	boxscore, err := h.boxscoreService.Get(ctx, gameID, gameDate)
 	if err != nil {
-		logger.Error("failed to get boxscore", slog.Any("error", err))
+		logger.ErrorContext(ctx, "failed to get boxscore", slog.Any("error", err))
 		util.WriteJSON(http.StatusInternalServerError, err, w)
 		return
 	}
